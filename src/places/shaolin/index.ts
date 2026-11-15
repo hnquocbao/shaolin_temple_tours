@@ -300,9 +300,9 @@ function hallFront(id: string, x: number, back: number, up: number, ahead: numbe
 function shaolinStops(): readonly CameraStop[] {
   const named = (stop: CameraStop, id: string): CameraStop => ({ ...stop, id });
   return [
-    { id: 'arrival-1', position: [-104, 68, -108], target: [8, 28, 112], fov: 45 },
-    { id: 'arrival-2', position: [235, 75, 240], target: [0, 45, 60], fov: 45 },
-    { id: 'arrival-3', position: [0, 24, -78], target: [0, 24, 110], fov: 48 },
+    { id: 'arrival-1', position: [-110, 90, -130], target: [10, 35, 100], fov: 45 },
+    { id: 'arrival-2', position: [160, 122, 20], target: [0, 40, 70], fov: 45 },
+    { id: 'arrival-3', position: [0, 26, -80], target: [0, 24, 110], fov: 48 },
     { id: 'gate-front', position: [0, 3, -42], target: [0, 6, 0], fov: 55 },
     named(hallFront('heavenly-kings-hall', 18, 24, 6, 8, 9, 55), 'heavenly-kings-front'),
     named(hallFront('mahavira-hall', -27, 19.3, 5, 10, 12, 68), 'mahavira-front'),

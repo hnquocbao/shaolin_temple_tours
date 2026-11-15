@@ -205,6 +205,19 @@ describe('hand-over', () => {
     }
   });
 
+  it('turns smoothly, never to a zero vector, when the two views are opposite', () => {
+    const behind: Pose = { position: [0, 3, 0], target: [0, 3, -10], fov: 50 };
+    const ahead: Pose = { position: [0, 3, 0], target: [0, 3, 10], fov: 50 };
+    for (const w of [0.1, 0.5, 0.9, 0.999]) {
+      const p = blendPose(behind, ahead, w);
+      const d = [p.target[0] - p.position[0], p.target[1] - p.position[1], p.target[2] - p.position[2]];
+      expect(Math.hypot(d[0]!, d[1]!, d[2]!)).toBeGreaterThan(5);
+      expect(d.every(Number.isFinite)).toBe(true);
+    }
+    const nearly: Pose = { position: [0, 3, 0], target: [1e-4, 3, 10], fov: 50 };
+    expect(blendPose(behind, nearly, 0.5).target.every(Number.isFinite)).toBe(true);
+  });
+
   it('runs the whole flight, then blends, then hands the camera back', () => {
     const director = new ArrivalDirector(flight);
     expect(director.phase).toBe('flight');

@@ -62,11 +62,16 @@ export function createPlay({ canvas, scene, camera, place, arrival, onHandover }
   const checkHandover = (): void => {
     if (handedOver || !hasControl()) return;
     handedOver = true;
+    grace = 2;
     if (uiHost && params.ui) removeHint = showControlsHint(uiHost);
     onHandover?.();
   };
   /** The key that skipped the flight is not game input, however long it is held. */
   let skipKey: string | undefined;
+  /** Frames after hand-over in which a new key press is swallowed, so one landing on the very frame the flight ends is not a jump. */
+  let grace = 0;
+  /** Keys that never skip the flight or count as input: modifiers, function and lock keys. */
+  const NOT_A_KEY = /^(Shift|Control|Alt|Meta|OS)(Left|Right)$|^(F\d{1,2}|CapsLock|NumLock|ScrollLock|Tab|ContextMenu|Fn|FnLock|Pause|PrintScreen)$/;
 
   // ---- input
   const keys = new Set<string>();
@@ -82,9 +87,11 @@ export function createPlay({ canvas, scene, camera, place, arrival, onHandover }
   };
   const onKeyDown = (e: KeyboardEvent): void => {
     if (typing(e) || e.ctrlKey || e.metaKey || e.altKey) return;
-    if (!hasControl()) {
+    if (!hasControl() && NOT_A_KEY.test(e.code)) return;
+    if (!hasControl() || (grace > 0 && !NOT_A_KEY.test(e.code))) {
       if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
       skipKey = e.code;
+      grace = Math.max(grace, 2);
       arrival?.skip();
       return;
     }
@@ -100,15 +107,24 @@ export function createPlay({ canvas, scene, camera, place, arrival, onHandover }
     if (e.code === skipKey) skipKey = undefined;
     if (!typing(e)) keys.delete(e.code);
   };
-  const onBlur = (): void => keys.clear();
+  const onBlur = (): void => {
+    keys.clear();
+    skipKey = undefined;
+  };
   const onVisibility = (): void => {
-    if (document.hidden) keys.clear();
+    if (document.hidden) {
+      keys.clear();
+      skipKey = undefined;
+    }
   };
   const locked = (): boolean => document.pointerLockElement === canvas;
   let wasLocked = false;
   const onLockChange = (): void => {
     // Losing the lock (Esc, alt-tab) can swallow key-ups: forget held keys.
-    if (wasLocked && !locked()) keys.clear();
+    if (wasLocked && !locked()) {
+      keys.clear();
+      skipKey = undefined;
+    }
     wasLocked = locked();
   };
   const onMouseDown = (): void => {
@@ -233,6 +249,7 @@ export function createPlay({ canvas, scene, camera, place, arrival, onHandover }
       lastRespawns = sim.state.respawns;
       drawHero(delta, respawned);
       fly(delta);
+      if (grace > 0) grace--;
     },
     phase: () => (hasControl() ? 'play' : 'arrival'),
     arrivalProgress: () => arrival?.progress ?? 1,

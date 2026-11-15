@@ -1,5 +1,6 @@
 import { PerspectiveCamera, Scene, WebGLRenderer } from 'three';
 import { ARRIVAL, ArrivalDirector, arrivalSeconds, arrivalStops, createFlight, flightStopId, groundWithSolids, parseFlightStopId, titleOpacity } from '../game/arrival';
+import { CAMERA } from '../game/player/camera-rig';
 import { createPlay, type Play } from '../game/play';
 import { catalog, findPlace, findStop } from '../places/registry';
 import type { CameraStop } from '../places/types';
@@ -25,6 +26,8 @@ export interface GameProbe {
   stats: { drawCalls: number; triangles: number; geometries: number; textures: number };
   /** Play mode: 'arrival' during the opening flight, then 'play'. Undefined in view mode. */
   phase?: 'arrival' | 'play' | undefined;
+  /** Camera position in play mode, so checks can see the flight move. */
+  camera?: { x: number; y: number; z: number } | undefined;
   /** Hero position in play mode. */
   hero: { x: number; y: number; z: number } | undefined;
 }
@@ -49,7 +52,11 @@ export function startApp(canvas: HTMLCanvasElement, uiHost: HTMLElement, params:
   const place = findPlace(params.place);
   // A named stop or a frozen frame is a fixed view; otherwise the player is in control.
   // `?arrival-t=` and the catalog's `flight-NN` stops are frozen views of the arrival flight.
-  const flightU = params.arrivalT ?? parseFlightStopId(params.stop);
+  // A real stop of the place wins over a synthetic `flight-NN` id.
+  const realStop = params.stop !== undefined && place.stops.some((s) => s.id === params.stop);
+  const flightU = params.arrivalT ?? (realStop ? undefined : parseFlightStopId(params.stop));
+  // Fail before anything is built, so nothing leaks.
+  if (flightU !== undefined && arrivalStops(place).length === 0) throw new Error(`Place "${place.id}" has no arrival flight`);
   const mode = params.stop !== undefined || params.freeze || flightU !== undefined ? 'view' : 'play';
   const stop = mode === 'view' && flightU === undefined ? findStop(place, params.stop) : undefined;
 
@@ -72,11 +79,12 @@ export function startApp(canvas: HTMLCanvasElement, uiHost: HTMLElement, params:
   const pipeline = createPipeline(renderer, scene, camera, place.mood);
 
   const instance = place.build({ scene, rng: createRng(seedFrom(place.id)) });
-  const flight = createFlight(arrivalStops(place), groundWithSolids(instance.ground, instance.solids), arrivalSeconds(place));
+  const floor = groundWithSolids(instance.ground, instance.solids);
+  const flight = createFlight(arrivalStops(place), floor, arrivalSeconds(place));
   let play: Play | undefined;
   let removeTitle: (() => void) | undefined;
   let bigTitle: ArrivalTitle | undefined;
-  const director = mode === 'play' && params.arrival && flight ? new ArrivalDirector(flight, ARRIVAL) : undefined;
+  const director = mode === 'play' && params.arrival && flight ? new ArrivalDirector(flight, { ...ARRIVAL, floor, ground: instance.ground, playClearance: CAMERA.clearance }) : undefined;
   if (flightU !== undefined) {
     if (!flight) throw new Error(`Place "${place.id}" has no arrival flight`);
     const pose = flight.sample(flightU);
@@ -136,6 +144,7 @@ export function startApp(canvas: HTMLCanvasElement, uiHost: HTMLElement, params:
     };
     probe.hero = play?.heroPosition();
     probe.phase = play?.phase?.();
+    probe.camera = play ? { x: camera.position.x, y: camera.position.y, z: camera.position.z } : undefined;
     if (director && bigTitle && director.phase === 'flight') bigTitle.setOpacity(titleOpacity(director.progress));
     if (frames >= SETTLE_FRAMES) probe.ready = true;
     // A frozen view is a still picture: stop drawing once it has settled.

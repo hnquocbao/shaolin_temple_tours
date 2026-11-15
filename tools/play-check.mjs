@@ -204,27 +204,38 @@ async function run(page) {
   expect(track.maxStep < 6, `the hero jumped ${track.maxStep.toFixed(1)} m in one frame (respawn or teleport)`);
 }
 
-/** With the flight enabled: the phase starts as 'arrival', the hero stays put, a key press skips to 'play'. */
+/**
+ * With the flight enabled and the interface on: the phase starts as 'arrival', the camera really moves, the title
+ * is on screen, the hero stays put, and a key press hands over to 'play' without the key leaking into a jump.
+ */
 async function runArrival(page, base) {
-  await page.goto(`${base}/?place=${place}&ui=0`, { waitUntil: 'load' });
+  await page.goto(`${base}/?place=${place}`, { waitUntil: 'load' });
   await page.waitForFunction(() => window.__game?.ready === true || window.__game?.error !== undefined, null, { timeout: 120_000 });
-  const read = () => page.evaluate(() => ({ phase: window.__game.phase, hero: window.__game.hero }));
-  const first = await read();
-  if (first.phase !== 'arrival') throw new Stage(`arrival: expected phase "arrival" on entering the place, got "${first.phase}"`);
-  await withTimeout(page.evaluate(() => new Promise((resolve) => {
-    let left = 12;
+  const read = () => page.evaluate(() => ({ phase: window.__game.phase, hero: window.__game.hero, camera: window.__game.camera }));
+  const frames = (n) => withTimeout(page.evaluate((count) => new Promise((resolve) => {
+    let left = count;
     const tick = () => (--left <= 0 ? resolve(undefined) : requestAnimationFrame(tick));
     requestAnimationFrame(tick);
-  })), 120_000, 'arrival: wait for frames');
+  }), n), 120_000, 'arrival: wait for frames');
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+  const first = await read();
+  if (first.phase !== 'arrival') throw new Stage(`arrival: expected phase "arrival" on entering the place, got "${first.phase}"`);
+  if (!first.camera) throw new Stage('arrival: the probe does not report the camera position in play mode');
+  const title = await page.evaluate(() => !!document.querySelector('[data-role="arrival-title"]') && !!document.querySelector('[data-role="arrival-skip"]'));
+  if (!title) throw new Stage('arrival: the place title and the skip line are not on screen during the flight (interface on)');
+  await frames(20);
   const during = await read();
   if (during.phase !== 'arrival') throw new Stage(`arrival: the flight ended by itself after a few frames (phase "${during.phase}")`);
-  const moved = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
-  if (moved(first.hero, during.hero) > 0.05) throw new Stage('arrival: the hero moved during the flight');
+  if (dist(first.camera, during.camera) < 2) throw new Stage(`arrival: the camera did not move during the flight (${dist(first.camera, during.camera).toFixed(2)} m in 20 frames)`);
+  if (dist(first.hero, during.hero) > 0.05) throw new Stage('arrival: the hero moved during the flight');
   await page.keyboard.press('Space'); // any key skips; the key itself must not make the hero jump
   await page.waitForFunction(() => window.__game.phase === 'play', null, { polling: 'raf', timeout: 60_000 });
+  await frames(30);
   const after = await read();
-  if (moved(first.hero, after.hero) > 0.05) throw new Stage('arrival: skipping the flight moved the hero');
-  log('flight starts as "arrival", the hero stays put, a key press hands over to "play"');
+  if (Math.abs(after.hero.y - first.hero.y) > 0.02) throw new Stage(`arrival: the skip key leaked into a jump (hero y ${first.hero.y.toFixed(2)} -> ${after.hero.y.toFixed(2)})`);
+  if (dist(first.hero, after.hero) > 0.05) throw new Stage('arrival: skipping the flight moved the hero');
+  if (after.hero.respawns !== 0) throw new Stage(`arrival: the hero was respawned ${after.hero.respawns} time(s) after the skip`);
+  log('flight: phase "arrival", camera moves, title shown, a key press hands over to "play", no jump, no respawn');
 }
 
 async function main() {

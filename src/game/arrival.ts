@@ -14,10 +14,13 @@ export const ARRIVAL = {
   defaultSeconds: 12,
   /** A flight with a single stop is a still hold of this length at most. */
   holdSeconds: 3,
-  /** The camera stays at least this far above `ground.heightAt`, in metres. */
-  groundMargin: 8,
+  /** The camera stays at least this far above the ground, in metres: more than the tallest tree crown (about 17 m), which `ground` does not include. */
+  groundMargin: 18,
   /** How softly the ground clamp bends the path, in metres (bigger is smoother and keeps further clear). */
-  groundSoftness: 4,
+  /** The camera clears the highest ground within this radius of it, so it rises before a cliff, not at it. */
+  footprint: 14,
+  /** The rise over ground is spread over this much path on each side, in metres. */
+  liftWindow: 45,
   /** Blend from the last flight frame to the play camera when the flight ends on its own. */
   handoverSeconds: 1.6,
   /** Blend to the play camera when the player skips. */
@@ -111,12 +114,6 @@ export interface Flight {
   sample(u: number): Pose;
 }
 
-/** Smooth maximum: never below either input, bends instead of kinking where they cross, exact when they are `k` or more apart. */
-function softMax(a: number, b: number, k: number): number {
-  const d = Math.abs(a - b);
-  return Math.max(a, b) + (d >= k ? 0 : ((k - d) * (k - d)) / (4 * k));
-}
-
 /**
  * A flight through `stops`. Position and look-at target each follow a centripetal Catmull-Rom spline.
  * The spline is walked at an even pace over both paths together, so the camera never speeds up or slows
@@ -126,14 +123,18 @@ function softMax(a: number, b: number, k: number): number {
 export function createFlight(stops: readonly CameraStop[], ground: Ground, seconds: number = ARRIVAL.defaultSeconds): Flight | undefined {
   const first = stops[0];
   if (!first) return undefined;
-  const lift = (position: Vec3): Vec3 => [
-    position[0],
-    softMax(position[1], ground.heightAt(position[0], position[2]) + ARRIVAL.groundMargin, ARRIVAL.groundSoftness),
-    position[2],
-  ];
+  /** The lowest the camera may be at (x, z): the highest ground in a ring around it, plus the margin. */
+  const floorAt = (x: number, z: number): number => {
+    let h = ground.heightAt(x, z);
+    for (let k = 0; k < 8; k++) {
+      const a = (k * Math.PI) / 4;
+      h = Math.max(h, ground.heightAt(x + Math.cos(a) * ARRIVAL.footprint, z + Math.sin(a) * ARRIVAL.footprint));
+    }
+    return h + ARRIVAL.groundMargin;
+  };
 
   if (stops.length === 1) {
-    const pose: Pose = { position: lift(first.position), target: first.target, fov: first.fov ?? 50 };
+    const pose: Pose = { position: [first.position[0], Math.max(first.position[1], floorAt(first.position[0], first.position[2])), first.position[2]], target: first.target, fov: first.fov ?? 50 };
     return { seconds: Math.min(seconds, ARRIVAL.holdSeconds), sample: () => pose };
   }
 
@@ -161,6 +162,38 @@ export function createFlight(stops: readonly CameraStop[], ground: Ground, secon
   const totalT = lengthT[steps]!;
   const weights = (totalP > 0 ? 1 : 0) + (totalT > 0 ? 1 : 0);
   const cumulative = lengthP.map((p, i) => (totalP > 0 ? p / totalP : 0) + (totalT > 0 ? lengthT[i]! / totalT : 0));
+
+  // How far each table point must be raised to clear the ground, spread along the path: the running maximum of
+  // the need over a window, then two box averages over the same window. The result never falls short of the
+  // need at any point (the average of values that are each at least the need is at least the need), and it
+  // starts rising a window early and eases off a window late, so there are no jumps at cliffs and spires.
+  const metresPerStep = totalP > 0 ? totalP / steps : 1;
+  const radius = Math.max(1, Math.round(ARRIVAL.liftWindow / metresPerStep));
+  const need = pointsP.map((p) => Math.max(0, floorAt(p.x, p.z) - p.y));
+  const smoothLift = (values: readonly number[]): number[] => {
+    const out: number[] = [];
+    for (let i = 0; i < values.length; i++) {
+      let sum = 0;
+      let count = 0;
+      for (let j = Math.max(0, i - radius); j <= Math.min(values.length - 1, i + radius); j++) {
+        sum += values[j]!;
+        count++;
+      }
+      out.push(sum / count);
+    }
+    return out;
+  };
+  const ahead: number[] = need.map((_, i) => {
+    let m = 0;
+    for (let j = Math.max(0, i - 2 * radius); j <= Math.min(steps, i + 2 * radius); j++) m = Math.max(m, need[j]!);
+    return m;
+  });
+  const lifts = smoothLift(smoothLift(ahead));
+  const liftAt = (t: number): number => {
+    const f = Math.min(steps, Math.max(0, t * steps));
+    const i = Math.min(steps - 1, Math.floor(f));
+    return lerp(lifts[i]!, lifts[i + 1]!, f - i);
+  };
 
   /** Curve parameter at a given share (0..1) of the combined path. */
   const parameterAt = (share: number): number => {
@@ -190,7 +223,7 @@ export function createFlight(stops: readonly CameraStop[], ground: Ground, secon
       const t = parameterAt(flightEase(u));
       const p = positions.getPoint(t);
       const q = targets.getPoint(t);
-      return { position: lift([p.x, p.y, p.z]), target: [q.x, q.y, q.z], fov: fovAt(t) };
+      return { position: [p.x, p.y + liftAt(t), p.z], target: [q.x, q.y, q.z], fov: fovAt(t) };
     },
   };
 }
@@ -211,16 +244,27 @@ function slerp(a: Vec3, b: Vec3, w: number): [number, number, number] {
   const dot = Math.min(1, Math.max(-1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2]));
   const theta = Math.acos(dot);
   let r: [number, number, number];
-  if (theta < 1e-5 || Math.PI - theta < 1e-5) {
+  if (theta < 1e-4) {
     r = [lerp(a[0], b[0], w), lerp(a[1], b[1], w), lerp(a[2], b[2], w)];
+  } else if (Math.PI - theta < 1e-3) {
+    // Nearly opposite: any turn is as short as any other, so turn about the vertical (a level pan) and end on `b`.
+    let side: [number, number, number] = [a[2], 0, -a[0]];
+    if (Math.hypot(...side) < 1e-6) side = [1, 0, 0];
+    const l = Math.hypot(...side);
+    const phi = w * Math.PI;
+    r = [
+      a[0] * Math.cos(phi) + (side[0] / l) * Math.sin(phi),
+      a[1] * Math.cos(phi) + (side[1] / l) * Math.sin(phi),
+      a[2] * Math.cos(phi) + (side[2] / l) * Math.sin(phi),
+    ];
   } else {
     const s = Math.sin(theta);
     const ka = Math.sin((1 - w) * theta) / s;
     const kb = Math.sin(w * theta) / s;
     r = [a[0] * ka + b[0] * kb, a[1] * ka + b[1] * kb, a[2] * ka + b[2] * kb];
   }
-  const l = length(r) || 1;
-  return [r[0] / l, r[1] / l, r[2] / l];
+  const l = Math.hypot(r[0], r[1], r[2]);
+  return l > 1e-9 ? [r[0] / l, r[1] / l, r[2] / l] : [a[0], a[1], a[2]];
 }
 
 /**
@@ -250,6 +294,17 @@ export type ArrivalPhase = 'flight' | 'handover' | 'done';
  * Runs the flight and then the blend to the play camera. Call `step` once per frame with the live play
  * camera; it returns the camera to show. The player has control from the moment the phase leaves 'flight'.
  */
+export interface DirectorOptions {
+  handoverSeconds: number;
+  skipSeconds: number;
+  /** The ground with buildings and trunks raised in (`groundWithSolids`): the blend stays above it, fading out. */
+  floor?: Ground;
+  /** The plain ground: what the play camera itself keeps clear of. The blend ends on this. */
+  ground?: Ground;
+  /** Clearance the play camera keeps above the plain ground, metres. */
+  playClearance?: number;
+}
+
 export class ArrivalDirector {
   phase: ArrivalPhase = 'flight';
   private elapsed = 0;
@@ -260,7 +315,7 @@ export class ArrivalDirector {
 
   constructor(
     readonly flight: Flight,
-    private readonly timing: { handoverSeconds: number; skipSeconds: number } = ARRIVAL,
+    private readonly timing: DirectorOptions = ARRIVAL,
   ) {
     this.from = flight.sample(0);
     this.shown = this.from;
@@ -284,6 +339,23 @@ export class ArrivalDirector {
     this.blendElapsed = 0;
   }
 
+  /**
+   * Lift a blended pose over the ground and the solids. The margin starts at the flight's and fades to the play
+   * camera's own as the blend completes, and the solids' share fades out too, so the last frame is the play camera.
+   */
+  private keepClear(pose: Pose, w: number): Pose {
+    const { floor, ground } = this.timing;
+    if (!floor && !ground) return pose;
+    const [x, y, z] = pose.position;
+    const keep = 1 - w;
+    const plain = (ground ?? floor!).heightAt(x, z) + lerp(ARRIVAL.groundMargin, this.timing.playClearance ?? 0.45, w);
+    const raised = floor ? floor.heightAt(x, z) + ARRIVAL.groundMargin : plain;
+    const min = lerp(plain, Math.max(plain, raised), keep);
+    if (y >= min) return pose;
+    const lift = min - y;
+    return { position: [x, min, z], target: [pose.target[0], pose.target[1] + lift, pose.target[2]], fov: pose.fov };
+  }
+
   step(delta: number, live: Pose): Pose {
     if (this.phase === 'done') return live;
     if (this.phase === 'flight') {
@@ -301,7 +373,8 @@ export class ArrivalDirector {
       this.phase = 'done';
       return live;
     }
-    this.shown = blendPose(this.from, live, blendWeight(this.blendElapsed, this.blendSeconds));
+    const w = blendWeight(this.blendElapsed, this.blendSeconds);
+    this.shown = this.keepClear(blendPose(this.from, live, w), w);
     return this.shown;
   }
 }

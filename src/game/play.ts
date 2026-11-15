@@ -13,7 +13,8 @@ export interface Play {
   /** Advance by `delta` seconds. Not called when the scene is frozen. */
   update(elapsed: number, delta: number): void;
   /** Where the hero is, for the probe and for tests. */
-  heroPosition(): { x: number; y: number; z: number };
+  /** `respawns` counts how often the hero was put back; the play check asserts it stays 0. */
+  heroPosition(): { x: number; y: number; z: number; respawns?: number };
   dispose(): void;
 }
 
@@ -54,17 +55,31 @@ export function createPlay({ canvas, scene, camera, place }: PlayContext): Play 
   let pitch: number = CAMERA.defaultPitch;
   let wantedDistance: number = CAMERA.defaultDistance;
 
+  /** Keys typed into a text field are not game input. */
+  const typing = (e: KeyboardEvent): boolean => {
+    const t = e.target;
+    return t instanceof HTMLElement && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+  };
   const onKeyDown = (e: KeyboardEvent): void => {
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (typing(e) || e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
     if (e.code === 'Space' && !keys.has('Space')) jumpLatch = true;
     keys.add(e.code);
   };
   const onKeyUp = (e: KeyboardEvent): void => {
-    keys.delete(e.code);
+    if (!typing(e)) keys.delete(e.code);
   };
   const onBlur = (): void => keys.clear();
+  const onVisibility = (): void => {
+    if (document.hidden) keys.clear();
+  };
   const locked = (): boolean => document.pointerLockElement === canvas;
+  let wasLocked = false;
+  const onLockChange = (): void => {
+    // Losing the lock (Esc, alt-tab) can swallow key-ups: forget held keys.
+    if (wasLocked && !locked()) keys.clear();
+    wasLocked = locked();
+  };
   const onMouseMove = (e: MouseEvent): void => {
     if (!locked()) return;
     yaw -= e.movementX * MOUSE_SENSITIVITY;
@@ -86,6 +101,8 @@ export function createPlay({ canvas, scene, camera, place }: PlayContext): Play 
   window.addEventListener('keydown', onKeyDown);
   window.addEventListener('keyup', onKeyUp);
   window.addEventListener('blur', onBlur);
+  document.addEventListener('visibilitychange', onVisibility);
+  document.addEventListener('pointerlockchange', onLockChange);
   window.addEventListener('mousemove', onMouseMove);
   canvas.addEventListener('click', onClick);
   canvas.addEventListener('wheel', onWheel, { passive: false });
@@ -96,8 +113,7 @@ export function createPlay({ canvas, scene, camera, place }: PlayContext): Play 
     moveZ: (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0),
     cameraYaw: yaw,
     sprint: keys.has('ShiftLeft') || keys.has('ShiftRight'),
-    // A tap shorter than a frame still counts as one press.
-    jump: keys.has('Space') || jumpLatch,
+    jump: keys.has('Space'),
   });
 
   // ---- camera
@@ -118,14 +134,15 @@ export function createPlay({ canvas, scene, camera, place }: PlayContext): Play 
       eye.z = damp(eye.z, hz, 20, dt);
       eye.y = damp(eye.y, hy + EYE_HEIGHT, 8, dt);
     }
-    const solved = solveCamera(world, [eye.x, eye.y, eye.z], yaw, pitch, wantedDistance);
+    // Solve from the hero's true eye outwards through the lagging eye, so the camera never starts inside a wall.
+    const solved = solveCamera(world, [eye.x, eye.y, eye.z], yaw, pitch, wantedDistance, [hx, hy + EYE_HEIGHT, hz]);
     shown = snap || solved.distance < shown ? solved.distance : damp(shown, solved.distance, 4, dt);
     const [ox, oy, oz] = orbitOffset(yaw, pitch, shown);
-    const cx = eye.x + ox;
-    const cz = eye.z + oz;
-    const cy = Math.max(eye.y + oy, world.heightAt(cx, cz) + CAMERA.clearance);
+    const cx = solved.originX + ox;
+    const cz = solved.originZ + oz;
+    const cy = Math.max(solved.originY + oy, world.heightAt(cx, cz) + CAMERA.clearance);
     camera.position.set(cx, cy, cz);
-    camera.lookAt(eye.x, eye.y, eye.z);
+    camera.lookAt(solved.originX, solved.originY, solved.originZ);
     // A little widening with speed sells the leap.
     fov = damp(fov, baseFov + 9 * clamp((speed - 6.5) / 6, 0, 1), 3, dt);
     if (Math.abs(camera.fov - fov) > 0.02) {
@@ -156,17 +173,19 @@ export function createPlay({ canvas, scene, camera, place }: PlayContext): Play 
       if (keys.has('ArrowRight')) yaw -= KEY_ORBIT * delta;
       if (keys.has('ArrowUp')) pitch = clamp(pitch - KEY_ORBIT * 0.5 * delta, CAMERA.minPitch, CAMERA.maxPitch);
       if (keys.has('ArrowDown')) pitch = clamp(pitch + KEY_ORBIT * 0.5 * delta, CAMERA.minPitch, CAMERA.maxPitch);
-      advance(sim, readInput(), delta, world);
-      jumpLatch = false;
+      // A tap counts for the first step of the next frame that runs one, and only that step.
+      if (advance(sim, readInput(), delta, world, jumpLatch) > 0) jumpLatch = false;
       const respawned = sim.state.respawns !== lastRespawns;
       lastRespawns = sim.state.respawns;
       drawHero(delta, respawned);
     },
-    heroPosition: () => ({ x: sim.state.x, y: sim.state.y, z: sim.state.z }),
+    heroPosition: () => ({ x: sim.state.x, y: sim.state.y, z: sim.state.z, respawns: sim.state.respawns }),
     dispose() {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
+      document.removeEventListener('visibilitychange', onVisibility);
+      document.removeEventListener('pointerlockchange', onLockChange);
       window.removeEventListener('mousemove', onMouseMove);
       canvas.removeEventListener('click', onClick);
       canvas.removeEventListener('wheel', onWheel);

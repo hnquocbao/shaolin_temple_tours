@@ -26,6 +26,9 @@ const [width, height] = (value('--size') ?? '960x540').split('x').map(Number);
 const shotsDir = value('--shots') ? path.resolve(root, value('--shots')) : undefined;
 const place = value('--place') ?? 'yard';
 const WAIT = 150_000; // per condition; a few fps still gets there
+const TOTAL = 300_000; // the whole script, from the first stage to the last
+const deadline = Date.now() + TOTAL;
+const remaining = () => deadline - Date.now();
 
 const problems = [];
 const log = (message) => console.log(`  ${message}`);
@@ -58,15 +61,32 @@ async function waitForServer(url, child) {
 
 class Stage extends Error {}
 
+/** Reject if `promise` takes longer than `ms`, so no wait can hang the gate. */
+function withTimeout(promise, ms, label) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Stage(`${label}: no answer from the page within ${Math.round(ms / 1000)} s`)), ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
 async function run(page) {
-  const hero = () => page.evaluate(() => window.__game?.hero);
+  const hero = async () => {
+    const h = await withTimeout(page.evaluate(() => window.__game?.hero), 60_000, 'read hero');
+    if (h && h.respawns === undefined) throw new Stage('the hero probe does not report respawns');
+    if (h && h.respawns > 0) throw new Stage(`the hero was respawned ${h.respawns} time(s) at ${h.x.toFixed(1)}, ${h.y.toFixed(1)}, ${h.z.toFixed(1)}`);
+    return h;
+  };
   /** Resolve when `test(hero)` holds, checked every animation frame. */
   const until = async (label, test) => {
+    if (remaining() <= 0) throw new Stage(`${label}: the 5 minute limit for the whole check has passed`);
     try {
       await page.waitForFunction(
         `(() => { const h = window.__game && window.__game.hero; return !!h && (${test})(h); })()`,
         null,
-        { polling: 'raf', timeout: WAIT },
+        { polling: 'raf', timeout: Math.min(WAIT, remaining()) },
       );
     } catch {
       const h = await hero();
@@ -75,11 +95,11 @@ async function run(page) {
     return hero();
   };
   /** Wait a few rendered frames, so the game has time to react. */
-  const frames = (n) => page.evaluate((count) => new Promise((resolve) => {
+  const frames = (n) => withTimeout(page.evaluate((count) => new Promise((resolve) => {
     let left = count;
     const tick = () => (--left <= 0 ? resolve(undefined) : requestAnimationFrame(tick));
     requestAnimationFrame(tick);
-  }), n);
+  }), n), Math.max(1000, Math.min(120_000, remaining())), 'wait for frames');
   const settled = async (label, test) => {
     // The same grounded spot on two reads several frames apart.
     let previous = await until(label, test);
@@ -120,11 +140,27 @@ async function run(page) {
   const down = await settled('walk down the steps', '(h) => h.y < 0.05 && h.z > -9');
   expect(down.y < 0.05, `did not come down the far steps: ${near(down)}`);
 
+  // ---- the yard wall (x 22..23, z -8..12, 5 m high) must stop the hero: A strafes left (+x) into it
+  await page.keyboard.down('KeyW');
+  await until('walk alongside the wall', '(h) => h.z > 0');
+  await page.keyboard.up('KeyW');
+  await settled('settle beside the wall', '(h) => h.z > 0 && h.y < 0.05');
+  await page.keyboard.down('KeyA');
+  await until('reach the wall', '(h) => h.x > 20');
+  await frames(40); // keep pushing: a broken wall lets the hero through
+  const atWall = await hero();
+  await page.keyboard.up('KeyA');
+  log(`pressed into the wall at ${near(atWall)}`);
+  expect(atWall.x > 20.5 && atWall.x <= 21.7, `the wall did not stop the hero at x 21.65: ${near(atWall)}`);
+
   // ---- stage 2: line up with the 4 m house (x -17..-7, z 5..32), D strafes right (-x)
   await page.keyboard.down('KeyD');
   await until('strafe to the house', '(h) => h.x < -11.5');
   await page.keyboard.up('KeyD');
-  await settled('settle before the leap', '(h) => h.x < -11.5 && h.y < 0.05');
+  await page.keyboard.down('KeyS');
+  await until('back to the run-up line', '(h) => h.z < -9');
+  await page.keyboard.up('KeyS');
+  await settled('settle before the leap', '(h) => h.x < -11.5 && h.z < -8 && h.y < 0.05');
 
   // ---- stage 3: sprint and leap onto the roof
   await page.keyboard.down('ShiftLeft');
@@ -159,7 +195,9 @@ async function run(page) {
   expect(Math.hypot(end.x - start.x, end.z - start.z) < 5, `did not return near the start: ${near(end)} vs ${near(start)}`);
   await shot('5-return');
 
-  // ---- the hero must not have been teleported (a respawn) on the way
+  // ---- the hero must not have been put back (a respawn) or teleported on the way
+  const last = await hero(); // throws if respawns > 0
+  expect(last.respawns === 0, `respawns: ${last.respawns}`);
   const track = await page.evaluate(() => window.__track);
   log(`max height ${track.maxY.toFixed(1)} m, largest one-frame move ${track.maxStep.toFixed(1)} m`);
   expect(track.maxY > 8, `the leap was too low: max height ${track.maxY.toFixed(1)}`);
@@ -188,8 +226,18 @@ async function main() {
   server.stderr.on('data', (d) => (serverLog += d));
 
   let browser;
+  let watchdog;
   try {
     await waitForServer(base, server);
+    watchdog = setTimeout(() => {
+      console.error('PLAY FAIL: the whole check ran past 5 minutes');
+      try {
+        process.kill(-server.pid, 'SIGTERM');
+      } catch {
+        // already gone
+      }
+      process.exit(1);
+    }, TOTAL + 60_000);
     browser = await chromium.launch();
     const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1 });
     const page = await context.newPage();
@@ -220,7 +268,7 @@ async function main() {
 
     console.log(`play-check: ${place} at ${width}x${height}`);
     await page.goto(`${base}/?place=${place}${has('--ui') ? '' : '&ui=0'}`, { waitUntil: 'load' });
-    await page.waitForFunction(() => window.__game?.ready === true || window.__game?.error !== undefined, null, { timeout: WAIT });
+    await page.waitForFunction(() => window.__game?.ready === true || window.__game?.error !== undefined, null, { timeout: 120_000 });
     const probe = await page.evaluate(() => window.__game);
     if (probe.error) problems.push(`game error: ${probe.error}`);
     if (probe.mode !== 'play') problems.push(`expected play mode, got ${probe.mode}`);
@@ -229,6 +277,7 @@ async function main() {
     problems.push(cause instanceof Error ? cause.message : String(cause));
     if (serverLog.trim()) console.error(serverLog.trim().split('\n').slice(-10).join('\n'));
   } finally {
+    clearTimeout(watchdog);
     await browser?.close();
     try {
       process.kill(-server.pid, 'SIGTERM'); // by PID (the group we created), never by pattern

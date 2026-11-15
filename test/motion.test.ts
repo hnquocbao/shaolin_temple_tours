@@ -313,7 +313,8 @@ describe('ground', () => {
   });
 
   it('stays on the ground walking down steps', () => {
-    const w = makeWorld({ heightAt: (_x, z) => (z < 3 ? 1.2 : z < 6 ? 0.8 : z < 9 ? 0.4 : 0) });
+    // Stairs with 0.2 m risers, as the building kit makes them.
+    const w = makeWorld({ heightAt: (_x, z) => Math.max(0, 1.2 - 0.2 * Math.floor(Math.max(0, z) / 1)) });
     const start = { ...spawnState(w), z: 0 };
     const trail = steps(w, start, () => forward(), 400);
     expect(trail.at(-1)?.y).toBe(0);

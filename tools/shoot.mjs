@@ -5,6 +5,7 @@
 //   pnpm shoot -- --no-build         shoot the existing dist/
 //   pnpm shoot -- --place shaolin    one place
 //   pnpm shoot -- --out shots/ST3T-12
+//   pnpm shoot -- --size 960x540     quarter-size frames (what the gate runs)
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
@@ -22,7 +23,12 @@ const value = (name) => {
   return i >= 0 ? args[i + 1] : undefined;
 };
 
-const VIEW = { width: 1920, height: 1080 };
+// Full size by default. `--size 960x540` renders a quarter of the pixels: the gate uses it, because
+// the software renderer in CI and in the cloud session is slow and these checks do not need full size.
+const sizeArg = value('--size');
+const sizeMatch = sizeArg ? /^(\d+)x(\d+)$/.exec(sizeArg) : null;
+if (sizeArg && !sizeMatch) throw new Error(`--size must look like 960x540, got "${sizeArg}"`);
+const VIEW = sizeMatch ? { width: Number(sizeMatch[1]), height: Number(sizeMatch[2]) } : { width: 1920, height: 1080 };
 const outDir = path.resolve(root, value('--out') ?? 'shots');
 const onlyPlace = value('--place');
 const READY_TIMEOUT = 120_000; // software rendering in CI is slow

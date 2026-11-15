@@ -49,7 +49,7 @@ Dropped from WUAMYA: the ops session (the site is static; host changes on the VP
 1. `pnpm typecheck`
 2. `pnpm test` — unit tests for generators, game state, dialogue data and save/load
 3. `pnpm build` — and the bundle and asset size budget
-4. `pnpm shoot` — Playwright loads the build at every camera stop of every place, and fails on: a console error, a failed request, a frame that is mostly near-black or one flat colour, or a draw-call or triangle count over budget
+4. `pnpm shoot` — Playwright loads the build at every camera stop of every place (at 960×540 in the gate; `pnpm shoot` alone is 1920×1080), and fails on: a console error, a failed request, a frame that is mostly near-black or one flat colour, or a draw-call or triangle count over budget
 
 Screenshots land in `shots/<story>/`. Two rules learned by the reference projects and by WUAMYA:
 

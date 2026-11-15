@@ -14,5 +14,5 @@ A browser role-playing game for friends who love Jin Yong: play Qiao Feng, Duan 
 - Friends only, never public. Desktop first: keyboard and mouse, 1920×1080.
 - Copy is Vietnamese and English; names of heroes and places also in Chinese.
 - Checks: `pnpm gate`.
-- Jira project ST3T on `erptek.atlassian.net`. Commits start with the issue key (`ST3T-12: …`).
+- Jira project ST3T on `erptek.atlassian.net`. Commits start with the issue key (`ST3T-12: …`). The owner has approved all Jira operations in ST3T (15 Nov 2026): create, edit, transition, comment and manage sprints without asking first.
 - After each ticket, add an entry to `docs/learnings.md`.

@@ -7,7 +7,7 @@ const steps = [
   ['lint', ['pnpm', 'lint']],
   ['test', ['pnpm', 'test']],
   ['build', ['pnpm', 'build']],
-  ['shoot', ['pnpm', 'shoot', '--', '--no-build']],
+  ['shoot', ['pnpm', 'shoot', '--', '--no-build', '--size', '960x540']],
   ['play-check', ['pnpm', 'play-check', '--', '--no-build']],
 ];
 

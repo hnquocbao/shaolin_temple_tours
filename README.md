@@ -4,7 +4,7 @@ A browser role-playing game for friends who love Jin Yong's *Demi-Gods and Semi-
 
 A non-commercial fan project, not affiliated with the Jin Yong estate, the temple, or any existing adaptation.
 
-Status: Sprint 1 in progress. The project scaffold and screenshot harness exist; the scene is still a gray placeholder.
+Status: Sprint 1 in progress. Mount Shaoshi terrain, golden-hour atmosphere, the building kit and third-person movement with the lightness leap are in. The temple itself, trees and the arrival flight are being built.
 
 ## Run it
 

@@ -89,7 +89,7 @@ Out of scope: <deferred items>
 
 ## Parallel lanes
 
-Lanes touch different modules and run in separate worktrees, one PR each. Shared hot spots belong to the first lane and later lanes rebase: the building kit, the renderer and atmosphere setup, the character controller, game state, the i18n message files. Places are natural lanes: one place, one lane.
+Lanes touch different modules and run in separate worktrees, one PR each. A lane develops and tests against its own dev place (`dev: true`), never against a place another lane is changing. Shared hot spots belong to the first lane and later lanes rebase: the building kit, the renderer and atmosphere setup, the character controller, game state, the i18n message files. Places are natural lanes: one place, one lane.
 
 ## Structure the code for this workflow
 

@@ -59,7 +59,8 @@ Shared rules that follow:
 2. **Cloud sea and layered haze.** Mist fills the valleys; distant ridges fade in steps. This is the single most important effect, and it also hides what we do not build.
 3. **Warm against cool.** One warm source (sun, lanterns, windows) against cool shadow and fog. Each place has one time of day.
 4. **Roofs carry the picture.** Sweeping multi-tier roofs with upturned corners, heavy tile texture, ornate eaves. Detail budget goes to roofs first.
-5. **Small life.** Incense smoke, embers, falling leaves, birds, banners.
+5. **Trees everywhere.** Dark layered pines and cypresses among the roofs, forest on the slopes, orange and gold autumn foliage on cliffs and spire tops. Bare rock is the exception.
+6. **Small life.** Incense smoke, embers, falling leaves, birds, banners.
 
 This is a painterly wuxia world, not a reconstruction. The real Shaolin layout in `docs/site-brief.md` is inspiration for the central axis only.
 

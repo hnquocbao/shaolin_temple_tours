@@ -32,6 +32,7 @@ Jira project **ST3T** (board 136), two-week sprints. Backlog for the role-playin
 | 9 | Task | Placeholder hero figure with idle, run and leap (code-built) | E4 |
 | 10 | Task | Private preview on the ERPtek VPS, deployed on every push | E1 |
 | 11 | Spike | Character trial: one hero made by the chosen option, in the scene, with a verdict | E4 |
+| 12 | Story | Trees and foliage: pines, cypresses, autumn broadleaf, cliff bushes, forest scatter (added mid-sprint) | E2 |
 
 ## Sprint 2 — Three heroes (30 Nov – 11 Dec)
 

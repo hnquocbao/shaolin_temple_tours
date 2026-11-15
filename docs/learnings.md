@@ -31,3 +31,22 @@ After every ticket the controller adds one entry. Entries that change how we wor
 - What happened: the WUAMYA repo is attached to the same cloud session, and its `implementer`, `reviewer`, `scout`, `checker` and `jira-clerk` definitions shadow ours by name.
 - Learned: agent names collide across repos in one session.
 - Changed: until WUAMYA is detached, the controller briefs general-purpose agents with this repo's definition text instead of calling those names.
+
+### ST3T-13, ST3T-15 — Building kit and movement (15 Nov 2026)
+- What happened: both lanes passed their gate and their pictures looked right, and both independent reviews then found real bugs that no picture shows: leaked GPU buffers, collision boxes that were wrong after rotation, platform rims and stair sides the hero could walk through, a hero that walked down 80° cliff faces, a camera that could drop inside walls, and a play check that could not notice a respawn.
+- Learned: looking at pictures and reviewing code catch different failures. Collision, disposal and controller code need the reviewer even when everything looks fine.
+- Changed: nothing; the reviewer rule in `docs/workflow.md` already requires it. Reviewer briefs now say what is about to be merged alongside, because most findings were about what happens with real terrain and many buildings.
+
+### ST3T-11, ST3T-12 — Terrain and atmosphere (15 Nov 2026)
+- What happened: the first shots had near-black shaded facades, because the sun was moved behind the temple for a better vista and every building front faces the visitor. Fixing shade by raising ambient light made the whole picture pale.
+- Learned: decide the sun direction from the facades the player looks at, not from one hero shot. Shade brightness and overall contrast have to be tuned together, with real buildings in frame.
+- Changed: the sun now rakes across the fronts from the west-south-west. A tone-mapping mirror in code lets tests pin how bright shade ends up. The final grade is a controller task once the layout is in.
+
+- What happened: the terrain shots showed bare rock where the mood images are covered in trees. Trees were not in the sprint.
+- Learned: check the plan against the references element by element before the sprint, not after the first render.
+- Changed: ST3T-20 (trees and foliage) added to Sprint 1. `docs/game-design.md` art direction should list vegetation as a rule of its own (done in this commit).
+
+### Merging parallel lanes (15 Nov 2026)
+- What happened: the movement lane's tests assumed the placeholder Shaolin that the terrain lane was replacing, so the combined gate failed although each lane's own gate passed. A scripted conflict resolution also left a duplicated line in the place registry.
+- Learned: a lane's tests must not depend on a file another lane owns. Resolve conflicts by hand and run the gate before committing the resolution.
+- Changed: briefs tell lanes to test against their own dev place, and to treat another lane's place as read-only for tests too.

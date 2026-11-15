@@ -72,3 +72,8 @@ After every ticket the controller adds one entry. Entries that change how we wor
 - What happened: fixing the flight meant moving the arrival viewpoints, which would have dropped the best picture so far.
 - Learned: a camera stop can be both a flight waypoint and a composed still; changing one changes the other.
 - Changed: composed stills that should survive get their own stop (`haze-vista`), separate from the `arrival-*` waypoints.
+
+### ST3T-18 — Private preview, repo side (15 Nov 2026)
+- What happened: a local test of the deploy script, with deliberately bad archives, found that it accepted symlinks (nginx would have served the linked file) and that pruning by timestamp could delete the wrong release, because unpacked folders keep the archive's dates.
+- Learned: test deploy scripts against hostile and odd input before they reach a server; a script that only ever saw good input proves little.
+- Changed: links and special files are refused; each release is stamped with its deploy time. `docs/deploy.md` lists what the script refuses.

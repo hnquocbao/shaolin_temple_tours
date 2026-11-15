@@ -19,6 +19,7 @@ Any view can be opened by link: `?place=shaolin&stop=arrival-1`. Add `&freeze=1`
 - [Game design: heroes, places, art direction](docs/game-design.md)
 - [Technical approach and research](docs/approach.md)
 - [Delivery workflow](docs/workflow.md)
+- [Private preview and deployment](docs/deploy.md)
 - [Sprint plan](docs/sprint-plan.md)
 - [The real Shaolin Temple (inspiration)](docs/site-brief.md)
 - [Learnings](docs/learnings.md)

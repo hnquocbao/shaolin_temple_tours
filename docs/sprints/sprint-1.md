@@ -22,7 +22,7 @@ Shared hot spots: `src/places/shaolin/index.ts` (owned by Lane A first, then B),
 
 ## Waiting on the owner
 
-- ST3T-18: subdomain name, DNS record, deploy key and GitHub secrets for the VPS.
+- ST3T-18: repo side is ready and switched off (`docs/deploy.md`). Needs the owner's one-time setup: subdomain and DNS, deploy key, password file, nginx and certificate, GitHub secrets and variables.
 - ST3T-19: which AI model tool to use, and its files or host access.
 
 ## Progress log
@@ -45,6 +45,7 @@ Shared hot spots: `src/places/shaolin/index.ts` (owned by Lane A first, then B),
 | 15 Nov | ST3T-16 | Merged; review requested changes (vertical jolts over cliffs, unclamped skip blend, weak play check). Fixes in progress |
 | 15 Nov | — | Full gate passes on the combined game: 249 tests, 38 views, play check. Pictures in `docs/media/sprint-1/` |
 | 15 Nov | ST3T-16 | Closed after review fixes: smooth flight clear of cliffs, buildings and trees; safe skip; stricter play check. Full gate passes: 259+ tests, 39 views |
+| 15 Nov | ST3T-18 | Repo side landed, switched off: deploy script (tested locally), nginx config, workflow, setup guide. Waiting on the owner |
 
 ## Known gaps after the build (candidates for Sprint 2)
 

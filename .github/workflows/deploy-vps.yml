@@ -1,0 +1,94 @@
+name: Deploy preview
+
+# Publishes the built game to the private preview on the ERPtek VPS. Setup and secrets: docs/deploy.md.
+# Does nothing until the repository variable DEPLOY_ENABLED is set to "true".
+# The gate runs first. Roll back with "Run workflow" and an older full commit SHA.
+on:
+  push:
+    branches: [main, claude/amazing-gauss-d7j5mq]
+    paths-ignore: ['docs/**', '**/*.md']
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Full 40-char commit SHA to deploy (rollback). Empty = the selected branch head.'
+        required: false
+        default: ''
+
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      sha: ${{ steps.target.outputs.sha }}
+    steps:
+      - name: Resolve target commit
+        id: target
+        env:
+          INPUT_SHA: ${{ inputs.sha }}
+        run: |
+          sha="${INPUT_SHA:-$GITHUB_SHA}"
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::sha must be a full 40-char commit SHA"; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.target.outputs.sha }}
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm gate
+      - name: Pack the built site
+        run: tar -czf site.tar.gz -C dist .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site
+          path: site.tar.gz
+          retention-days: 7
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: site
+      - name: Prepare SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/deploy_key
+      - name: Deploy
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          SHA: ${{ needs.build.outputs.sha }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "$VPS_USER@$VPS_HOST" "$SHA" < site.tar.gz
+      - name: Smoke test
+        env:
+          PREVIEW_URL: ${{ vars.PREVIEW_URL }}
+          PREVIEW_BASIC_AUTH: ${{ secrets.PREVIEW_BASIC_AUTH }}
+        run: |
+          # Without the password the site must refuse; with it the page must load and be the game.
+          code=$(curl -s -o /dev/null -w '%{http_code}' "$PREVIEW_URL/")
+          [ "$code" = "401" ] || { echo "::error::expected 401 without a password, got $code"; exit 1; }
+          curl -fsS --retry 5 --retry-delay 3 -u "$PREVIEW_BASIC_AUTH" "$PREVIEW_URL/" | grep -q 'id="scene"'
+          curl -fsSI -u "$PREVIEW_BASIC_AUTH" "$PREVIEW_URL/" | grep -qi 'x-robots-tag: noindex'
+          echo "preview is live at $PREVIEW_URL"

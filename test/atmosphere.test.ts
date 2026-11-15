@@ -2,6 +2,7 @@ import { DirectionalLight, OrthographicCamera, Vector3 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { resolveMood } from '../src/engine/atmosphere/defaults';
 import { fitSunShadow } from '../src/engine/atmosphere/shadow';
+import { displayLuma, toDisplay, wallInShade, wallInSun } from '../src/engine/atmosphere/tonemap';
 import { sunDirection } from '../src/engine/atmosphere/uniforms';
 import type { Mood } from '../src/engine/mood';
 import { shaolin } from '../src/places/shaolin';
@@ -114,5 +115,31 @@ describe('sun shadow fit', () => {
     const width = cam.right - cam.left;
     const height = cam.top - cam.bottom;
     expect(Math.max(width, height) / mood.shadow.mapSize).toBeLessThan(0.15);
+  });
+});
+
+describe('shade is lifted, cool and never black', () => {
+  const mood = resolveMood(shaolin.mood);
+  const grey: [number, number, number] = [0.216, 0.216, 0.216]; // sRGB mid-grey (0x808080) in linear light
+  const red: [number, number, number] = [0.45, 0.07, 0.05]; // a mid-toned red wall
+
+  it('a mid-grey wall in full shade stays above luma 0.25 on screen and leans blue', () => {
+    const d = toDisplay(wallInShade(grey, mood), mood);
+    expect(displayLuma(d)).toBeGreaterThan(0.25);
+    expect(d[2]).toBeGreaterThan(d[0]);
+  });
+
+  it('a red wall in shade is 25-60% as bright as the same wall in the sun and still reads red', () => {
+    const shade = toDisplay(wallInShade(red, mood), mood);
+    const sun = toDisplay(wallInSun(red, mood), mood);
+    const ratio = displayLuma(shade) / displayLuma(sun);
+    expect(ratio).toBeGreaterThan(0.25);
+    expect(ratio).toBeLessThan(0.6);
+    expect(shade[0]).toBeGreaterThan(shade[1] * 1.5);
+  });
+
+  it('even a very dark surface in shade is not crushed to black', () => {
+    const coal = toDisplay(wallInShade([0.05, 0.05, 0.05], mood), mood);
+    expect(displayLuma(coal)).toBeGreaterThan(0.07);
   });
 });

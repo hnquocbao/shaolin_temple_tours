@@ -316,7 +316,7 @@ void main() {
              + texture2D(tBloom2, vUv).rgb * 0.22 + texture2D(tBloom3, vUv).rgb * 0.18;
   c += bloom * uBloom;
   c += texture2D(tShaft, vUv).rgb;
-  c *= uExposure;
+  c = c * uExposure + 0.014; // a little lift so the darkest tones keep their colour (mirrored in tonemap.ts)
 
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
   c = mix(vec3(l), c, uSaturation);

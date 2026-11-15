@@ -45,6 +45,7 @@ export function createNoiseTexture(size = 256): DataTexture {
   texture.magFilter = LinearFilter;
   texture.minFilter = LinearMipmapLinearFilter;
   texture.generateMipmaps = true;
+  texture.anisotropy = 8;
   texture.needsUpdate = true;
   return texture;
 }

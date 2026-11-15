@@ -1,7 +1,7 @@
-import { BoxGeometry, Group, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial } from 'three';
+import { BoxGeometry, Color, Group, InstancedMesh, Matrix4, Mesh, MeshStandardMaterial } from 'three';
 import { buildRingGeometry, type Rect, type RingSpec, type VertexAttribute } from '../../engine/terrain/heightfield';
 import { createTerrainMaterial } from '../../engine/terrain/material';
-import { fbm, mix, ridged, smax, smoothstep } from '../../engine/terrain/noise';
+import { fbm, hash2, mix, ridged, smax, smoothstep } from '../../engine/terrain/noise';
 
 /**
  * Mount Shaoshi: the ground of the Shaolin place.
@@ -67,21 +67,52 @@ export const terraces: readonly Terrace[] = Array.from({ length: TERRACE_COUNT }
 const STACK_START = FLAT_START;
 const STACK_END = (TERRACE_COUNT - 1) * TERRACE_DEPTH + TERRACE_FLAT_DEPTH / 2;
 
-/** Path: a stepped climb from the south to the front of the first terrace. */
+/**
+ * Path: a built stone stair from the south to the front of the first terrace, in seven straight flights
+ * (25 steps of 0.40 m tread and 0.16 m riser each) joined by level landings. It runs straight along x = 0.
+ */
 export const PATH_END_Z = STACK_START;
 export const PATH_START_Z = -262;
 export const PATH_WIDTH = 5;
-export const PATH_RISER = 0.25;
-/** Gentle slope of the spur's south face (rise per metre), which the path follows. */
-const SOUTH_SLOPE = 0.12;
+export const PATH_TREAD = 0.4;
+export const PATH_RISER = 0.16;
+export const PATH_FLIGHTS = 7;
+const FLIGHT_STEPS = 25;
+const FLIGHT_LENGTH = FLIGHT_STEPS * PATH_TREAD;
+const FLIGHT_RISE = FLIGHT_STEPS * PATH_RISER;
+const PATH_LENGTH = PATH_END_Z - PATH_START_Z;
+/** Distance from one flight's top to the next flight's top. */
+const FLIGHT_PERIOD = (PATH_LENGTH - FLIGHT_LENGTH) / (PATH_FLIGHTS - 1);
+
+interface StairSample {
+  /** Smooth surface: the flights as straight ramps. */
+  ideal: number;
+  /** Walkable surface: the actual treads and landings. */
+  stepped: number;
+}
+
+/** The stair at `d` metres south of its top (the gate). Flat above the gate and below the last flight. */
+function stairAt(d: number): StairSample {
+  if (d <= 0) return { ideal: TERRACE_BASE_TOP, stepped: TERRACE_BASE_TOP };
+  const j = Math.min(PATH_FLIGHTS - 1, Math.floor(d / FLIGHT_PERIOD));
+  const u = d - j * FLIGHT_PERIOD;
+  const top = TERRACE_BASE_TOP - j * FLIGHT_RISE;
+  if (u < FLIGHT_LENGTH) {
+    const k = Math.min(FLIGHT_STEPS - 1, Math.floor(u / PATH_TREAD));
+    return { ideal: top - (FLIGHT_RISE * u) / FLIGHT_LENGTH, stepped: top - k * PATH_RISER };
+  }
+  const landing = top - FLIGHT_RISE;
+  return { ideal: landing, stepped: landing };
+}
 
 export interface PathStep {
-  /** Centre of the tread. */
+  kind: 'tread' | 'landing';
+  /** Centre of the tread or landing. */
   x: number;
   z: number;
-  /** Length of the tread along z. */
+  /** Length along z. */
   depth: number;
-  /** Height of the tread surface. */
+  /** Height of the walkable surface. */
   top: number;
 }
 
@@ -89,9 +120,9 @@ export interface ShaolinTerrain {
   readonly seed: number;
   /** Walkable ground height. Finite everywhere, deterministic, cheap. The steps of the path are in it. */
   heightAt(x: number, z: number): number;
-  /** The same ground without path treads; the mesh is built from this and the treads are added on top. */
+  /** The same ground a little lower under the stair; the mesh is built from this and the treads are added on top. */
   meshHeightAt(x: number, z: number): number;
-  /** x of the path centre line at `z` (valid between PATH_START_Z and PATH_END_Z). */
+  /** x of the path centre line at `z`. The stair is straight, so this is always 0. */
   pathX(z: number): number;
   readonly pathSteps: readonly PathStep[];
   readonly terraces: readonly Terrace[];
@@ -100,10 +131,11 @@ export interface ShaolinTerrain {
 /** Height of the spine (the axis the terraces sit on) at `z`. */
 function spine(z: number): number {
   if (z < STACK_START) {
-    const south = TERRACE_BASE_TOP + SOUTH_SLOPE * (z - STACK_START);
-    // The spur dives faster once past the path's start.
-    const extra = Math.max(0, STACK_START - z - 245);
-    return south - 0.00075 * extra * extra;
+    // The spur carries the stair: its south face is the flights as ramps and the landings as shelves.
+    const d = STACK_START - z;
+    // It dives faster once past the stair's foot.
+    const extra = Math.max(0, d - PATH_LENGTH + 17);
+    return stairAt(d).ideal - 0.00075 * extra * extra;
   }
   if (z > STACK_END) {
     const q = z - STACK_END;
@@ -177,10 +209,11 @@ const SPIRES: readonly Spire[] = [
 ];
 
 /** Soften a height into rock ledges about 11 m apart: steep faces step like layered stone. */
-function ledges(h: number, amount: number): number {
-  const q = h / 11;
+function ledges(h: number, amount: number, x: number, z: number): number {
+  // The ledge height wanders with position so the rows are never level or locked to the mesh grid.
+  const q = h / 11 + 1.7 * fbm(x / 83, z / 83, 4711, 2);
   const f = q - Math.floor(q);
-  const stepped = (Math.floor(q) + smoothstep(0.3, 0.7, f)) * 11;
+  const stepped = (Math.floor(q) + smoothstep(0.3, 0.7, f)) * 11 - 1.7 * 11 * fbm(x / 83, z / 83, 4711, 2);
   return mix(h, stepped, amount);
 }
 
@@ -195,11 +228,7 @@ export function createShaolinTerrain(seed: number): ShaolinTerrain {
   const sBack = s + 79;
   const sSpire = s + 97;
 
-  const pathCentre = (z: number): number => {
-    const taper = smoothstep(PATH_END_Z, PATH_END_Z - 56, z) * smoothstep(PATH_START_Z - 8, PATH_START_Z + 24, z);
-    return 21 * Math.sin(((z - PATH_END_Z) / 224) * Math.PI * 2) * taper;
-  };
-  const pathSlope = (z: number): number => (pathCentre(z + 0.5) - pathCentre(z - 0.5));
+  const pathCentre = (): number => 0;
 
   function natural(x: number, z: number): number {
     const ax = Math.abs(x);
@@ -236,7 +265,7 @@ export function createShaolinTerrain(seed: number): ShaolinTerrain {
       const crest = 0.68 + 0.5 * ridged(x / (ring.halfWidth * 1.3) + k * 5, z / (ring.halfWidth * 1.3), sRingDetail + k, 3);
       const amp = 0.42 + 0.95 * smoothstep(0.28, 0.78, fbm(x / (ring.radius * 0.45) + k * 9, z / (ring.radius * 0.45), sRingAmp + k, 3));
       const ridge = VALLEY_FLOOR + (ring.peak - VALLEY_FLOOR) * prof * crest * amp * (1 - 0.92 * gap);
-      h = smax(h, ridge > -60 ? ledges(ridge, 0.28) : ridge, 40);
+      h = smax(h, ridge > -60 ? ledges(ridge, 0.1, x, z) : ridge, 40);
     }
 
     // The mountain behind the temple.
@@ -245,7 +274,7 @@ export function createShaolinTerrain(seed: number): ShaolinTerrain {
       const mass = 1 - smoothstep(700, 1700, ax);
       const detail = 0.55 + 0.7 * ridged(x / 240, z / 240, sBack, 5);
       const back = VALLEY_FLOOR + (360 - VALLEY_FLOOR) * rise * mass * detail * (0.72 + 0.4 * fbm(x / 700, z / 700, sBack + 5, 3));
-      h = smax(h, back > -60 ? ledges(back, 0.28) : back, 50);
+      h = smax(h, back > -60 ? ledges(back, 0.1, x, z) : back, 50);
     }
 
     // Spires: tapering towers with ledges, a wide foot and an uneven crown.
@@ -265,7 +294,7 @@ export function createShaolinTerrain(seed: number): ShaolinTerrain {
       const profile = core + foot * (1 - core);
       const crown = 16 * (fbm(x / 14, z / 14, sSpire + 3, 3) - 0.5) + 0.1 * (dx / sp.radius) * sp.top * 0.3;
       const height = -200 + (sp.top + crown + 200) * profile;
-      h = Math.max(h, height > -60 ? ledges(height, 0.45) : height);
+      h = Math.max(h, height > -60 ? ledges(height, 0.3, x, z) : height);
     }
 
     // The world ends in low ground well inside the camera's far plane, so no wall of terrain is ever cut off.
@@ -273,24 +302,17 @@ export function createShaolinTerrain(seed: number): ShaolinTerrain {
     return far > 0 ? mix(h, VALLEY_FLOOR - 20, far) : h;
   }
 
-  /** Path surface (smooth) at z, before the treads are cut in. */
-  const pathSmooth = (z: number): number => spine(z);
-  const steppedPath = (z: number): number => TERRACE_BASE_TOP + Math.floor((spine(z) - TERRACE_BASE_TOP) / PATH_RISER) * PATH_RISER;
-
   function ground(x: number, z: number, treads: boolean): number {
     const nat = natural(x, z);
-    if (z >= PATH_START_Z - 10 && z < PATH_END_Z && Math.abs(x) < 80) {
-      const cx = pathCentre(z);
-      const slope = pathSlope(z);
-      const d = Math.abs(x - cx) / Math.sqrt(1 + slope * slope);
-      if (d < 7.2) {
-        const along = smoothstep(PATH_START_Z - 10, PATH_START_Z + 8, z);
-        const bank = 1 - smoothstep(PATH_WIDTH / 2, PATH_WIDTH / 2 + 4.5, d);
-        const w = bank * along;
-        const tread = 1 - smoothstep(PATH_WIDTH / 2 - 0.5, PATH_WIDTH / 2 + 0.5, d);
-        // Treads only apply on the path itself; the mesh sits one riser lower so the treads stand proud of it.
-        const smooth = pathSmooth(z);
-        const surface = treads ? mix(smooth, steppedPath(z), tread) : smooth - PATH_RISER * tread;
+    if (z >= PATH_START_Z - 12 && z < PATH_END_Z && Math.abs(x) < 8) {
+      const ax = Math.abs(x);
+      const along = smoothstep(PATH_START_Z - 12, PATH_START_Z - 2, z);
+      const w = (1 - smoothstep(PATH_WIDTH / 2 + 0.4, 7.5, ax)) * along;
+      if (w > 0) {
+        const st = stairAt(PATH_END_Z - z);
+        const tread = 1 - smoothstep(PATH_WIDTH / 2, PATH_WIDTH / 2 + 0.2, ax);
+        // The mesh sits under the treads so they stand proud of it; outside the stair both agree.
+        const surface = treads ? mix(st.ideal, st.stepped, tread) : st.ideal - 0.2 * tread;
         return mix(nat, surface, w);
       }
     }
@@ -298,13 +320,21 @@ export function createShaolinTerrain(seed: number): ShaolinTerrain {
   }
 
   const pathSteps: PathStep[] = [];
-  {
-    const tread = PATH_RISER / SOUTH_SLOPE;
-    for (let k = -1; ; k--) {
-      const z0 = STACK_START + (k * PATH_RISER) / SOUTH_SLOPE;
-      if (z0 < PATH_START_Z + 6) break;
-      const zMid = z0 + tread / 2;
-      pathSteps.push({ x: pathCentre(zMid), z: zMid, depth: tread, top: TERRACE_BASE_TOP + k * PATH_RISER });
+  for (let j = 0; j < PATH_FLIGHTS; j++) {
+    const d0 = j * FLIGHT_PERIOD;
+    const top = TERRACE_BASE_TOP - j * FLIGHT_RISE;
+    for (let k = 0; k < FLIGHT_STEPS; k++) {
+      pathSteps.push({
+        kind: 'tread',
+        x: 0,
+        z: PATH_END_Z - (d0 + (k + 0.5) * PATH_TREAD),
+        depth: PATH_TREAD,
+        top: top - k * PATH_RISER,
+      });
+    }
+    if (j < PATH_FLIGHTS - 1) {
+      const length = FLIGHT_PERIOD - FLIGHT_LENGTH;
+      pathSteps.push({ kind: 'landing', x: 0, z: PATH_END_Z - (d0 + FLIGHT_LENGTH + length / 2), depth: length, top: top - FLIGHT_RISE });
     }
   }
 
@@ -377,25 +407,37 @@ export function buildShaolinTerrainMesh(terrain: ShaolinTerrain, seed: number): 
     root.add(mesh);
   });
 
-  // Path treads, one instanced box per riser, axis-aligned so they match `heightAt` exactly.
-  const treadGeometry = new BoxGeometry(1, 1, 1);
-  const treadMaterial = new MeshStandardMaterial({ color: 0x9d9486, roughness: 0.92 });
-  const treads = new InstancedMesh(treadGeometry, treadMaterial, terrain.pathSteps.length);
-  const m = new Matrix4();
+  // The stair: one instanced box per tread and landing, plus a kerb block either side of each. Every box
+  // reaches a metre below its top, so risers are solid and nothing floats. Axis-aligned, so the tops are
+  // exactly the heights `heightAt` returns.
+  const blocks: { x: number; z: number; w: number; d: number; top: number; thick: number; shade: number }[] = [];
+  const half = PATH_WIDTH / 2;
   terrain.pathSteps.forEach((step, n) => {
-    const slope = terrain.pathX(step.z + 0.5) - terrain.pathX(step.z - 0.5);
-    const width = (PATH_WIDTH + 1) * Math.sqrt(1 + slope * slope) + Math.abs(slope) * step.depth;
-    const thickness = 0.9;
-    m.makeScale(width, thickness, step.depth + 0.02);
-    m.setPosition(step.x, step.top - thickness / 2, step.z);
+    const jitter = 0.94 + 0.12 * hash2(n, 7, 31);
+    blocks.push({ x: step.x, z: step.z, w: PATH_WIDTH, d: step.depth + 0.01, top: step.top, thick: 1, shade: jitter });
+    for (const side of [-1, 1]) {
+      blocks.push({ x: step.x + side * (half + 0.2), z: step.z, w: 0.4, d: step.depth + 0.01, top: step.top + 0.3, thick: 1.3, shade: jitter * 0.9 });
+    }
+  });
+  const treadGeometry = new BoxGeometry(1, 1, 1);
+  // Same stone as the terrace paving in the terrain shader.
+  const treadMaterial = new MeshStandardMaterial({ color: 0xffffff, roughness: 0.92 });
+  const treads = new InstancedMesh(treadGeometry, treadMaterial, blocks.length);
+  const m = new Matrix4();
+  const tint = new Color();
+  blocks.forEach((b, n) => {
+    m.makeScale(b.w, b.thick, b.d);
+    m.setPosition(b.x, b.top - b.thick / 2, b.z);
     treads.setMatrixAt(n, m);
+    treads.setColorAt(n, tint.setRGB(0.6 * b.shade, 0.53 * b.shade, 0.43 * b.shade));
   });
   treads.instanceMatrix.needsUpdate = true;
+  if (treads.instanceColor) treads.instanceColor.needsUpdate = true;
   treads.castShadow = true;
   treads.receiveShadow = true;
   treads.frustumCulled = false;
-  treads.name = 'path-treads';
-  triangles += terrain.pathSteps.length * 12;
+  treads.name = 'path-stair';
+  triangles += blocks.length * 12;
   root.add(treads);
 
   return {

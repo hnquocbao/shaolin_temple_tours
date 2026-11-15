@@ -4,16 +4,17 @@ import type { PlaceDef, PlaceInstance, Solid } from '../types';
 import { TERRACE_COUNT, buildShaolinTerrainMesh, createShaolinTerrain, terraces } from './terrain';
 
 /**
- * Golden hour: a low warm sun from the north-west, cool blue shade, warm haze, and a sea of cloud
+ * Golden hour: a low warm sun from the west-south-west (it rakes across the south-facing fronts and casts long shadows
+ * towards the east-north-east), a strong cool sky fill in shade with a warm bounce from the lit ground, warm haze, and a sea of cloud
  * filling the valleys about 80 m below the first terrace. Everything else is in the air, not in the geometry.
  */
 const goldenHour: Mood = {
-  sunPosition: [-757, 156, 635],
+  sunPosition: [-906, 156, -423],
   sunColor: 0xffbf80,
-  sunIntensity: 3.4,
-  skyLight: 0x8aa4d6,
-  groundLight: 0x7a5f4a,
-  ambientIntensity: 0.9,
+  sunIntensity: 5.2,
+  skyLight: 0x93a8d0,
+  groundLight: 0xb08868,
+  ambientIntensity: 3.0,
   horizonColor: 0xf2c394,
   fogNear: 180,
   fogFar: 900,
@@ -50,7 +51,7 @@ const goldenHour: Mood = {
   },
   shafts: { strength: 0.3, decay: 0.945, color: 0xffc27f },
   bloom: { strength: 0.28, threshold: 1.15 },
-  grade: { shadowTint: 0xc4d2f2, highlightTint: 0xfff0d6, saturation: 1.12, contrast: 1.06, vignette: 0.28 },
+  grade: { shadowTint: 0xdbe5ff, highlightTint: 0xfff1da, saturation: 1.2, contrast: 1.07, vignette: 0.28 },
   shadow: { min: [-75, -35, -35], max: [75, 70, 300], mapSize: 4096 },
 };
 
@@ -66,7 +67,7 @@ export const shaolin: PlaceDef = {
   mood: goldenHour,
   stops: [
     { id: 'arrival-1', position: [-175, 105, -215], target: [10, 24, 120], fov: 45 },
-    { id: 'arrival-2', position: [170, 70, -100], target: [-155, 38, 230], fov: 45 },
+    { id: 'arrival-2', position: [235, 75, 240], target: [0, 45, 60], fov: 45 },
     { id: 'arrival-3', position: [0, 34, -110], target: [0, 16, 60], fov: 50 },
     { id: 'gate-front', position: [0, 3, -42], target: [0, 6, 0], fov: 55 },
   ],

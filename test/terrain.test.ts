@@ -4,6 +4,8 @@ import { buildRingGeometry } from '../src/engine/terrain/heightfield';
 import { fbm, hash2, ridged, smax, valueNoise } from '../src/engine/terrain/noise';
 import {
   PATH_END_Z,
+  PATH_RISER,
+  PATH_TREAD,
   PATH_START_Z,
   PATH_WIDTH,
   TERRACE_COUNT,
@@ -232,5 +234,25 @@ describe('terrain mesh', () => {
     for (const step of terrain.pathSteps) {
       expect(terrain.heightAt(step.x, step.z)).toBeCloseTo(step.top, 6);
     }
+  });
+
+  it('is a built stair: treads 0.35-0.5 m deep, risers under 0.2 m, straight and 4-6 m wide, joined by landings', () => {
+    expect(PATH_TREAD).toBeGreaterThanOrEqual(0.35);
+    expect(PATH_TREAD).toBeLessThanOrEqual(0.5);
+    expect(PATH_RISER).toBeLessThan(0.2);
+    expect(PATH_WIDTH).toBeGreaterThanOrEqual(4);
+    expect(PATH_WIDTH).toBeLessThanOrEqual(6);
+    const treads = terrain.pathSteps.filter((s) => s.kind === 'tread');
+    const landings = terrain.pathSteps.filter((s) => s.kind === 'landing');
+    expect(treads.length).toBeGreaterThan(150);
+    expect(landings.length).toBeGreaterThanOrEqual(5);
+    for (const t of treads) expect(t.depth).toBeCloseTo(PATH_TREAD, 9);
+    // Consecutive treads in a flight are exactly one riser apart.
+    for (let i = 1; i < treads.length; i++) {
+      const a = treads[i - 1];
+      const b = treads[i];
+      if (a && b && Math.abs(a.z - b.z - PATH_TREAD) < 1e-6) expect(a.top - b.top).toBeCloseTo(PATH_RISER, 9);
+    }
+    for (let z = PATH_START_Z; z <= PATH_END_Z; z += 7) expect(terrain.pathX(z)).toBe(0);
   });
 });

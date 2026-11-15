@@ -47,17 +47,26 @@ vec3 tP = vWPos;
 vec4 nA = triNoise(tP, tW, 0.0173, 0.4);
 vec4 nB = triNoise(tP, tW, 0.083, 1.1);
 vec4 nC = triNoise(tP, tW, 0.37, 2.3);
+// Fine scales that still hold up at 20-50 m: about 50 cm and 18 cm features.
+vec4 nD = triNoise(tP, tW, 1.93, 0.7);
+vec4 nE = triNoise(tP, tW, 5.41, 1.9);
 
 // Layered rock: horizontal bands that wobble, iron stains running down the face.
-float tStrata = texture2D(tNoise, vec2((tP.x + tP.z) * 0.010 + nA.g * 0.08, tP.y * 0.075)).r;
-float tBands = texture2D(tNoise, vec2((tP.x - tP.z) * 0.017, tP.y * 0.31)).g;
-float tStreak = texture2D(tNoise, vec2((tP.x + tP.z) * 0.09, tP.y * 0.008)).g;
+float tWarp = (nA.g - 0.5) * 2.0;
+float tS1 = texture2D(tNoise, vec2((tP.x + tP.z) * 0.0071 + tWarp * 0.06, tP.y * 0.061 + tWarp * 0.22 + nA.r * 0.45)).r;
+float tS2 = texture2D(tNoise, vec2((tP.x - tP.z) * 0.0131 + 0.3, tP.y * 0.17 + tWarp * 0.5 + nB.g * 0.3)).g;
+float tStrata = mix(tS1, tS2, 0.35 + 0.35 * nB.r);
+float tBands = texture2D(tNoise, vec2((tP.x - tP.z) * 0.0173 + nA.b * 0.1, tP.y * 0.29 + nB.r * 0.5)).g;
+float tStreak = texture2D(tNoise, vec2((tP.x + tP.z) * 0.09, tP.y * 0.008 + nA.r * 0.2)).g;
 vec3 rockLit = vec3(0.56, 0.47, 0.37);
 vec3 rockDark = vec3(0.27, 0.25, 0.26);
 vec3 tRock = mix(rockDark, rockLit, clamp(tStrata * 0.8 + tBands * 0.3, 0.0, 1.0));
 tRock = mix(tRock, vec3(0.52, 0.30, 0.17), smoothstep(0.55, 0.85, tStreak) * 0.5);
 tRock *= 1.0 - 0.3 * pow(nB.b, 3.0);
 tRock *= 0.86 + 0.24 * nC.a;
+tRock *= 0.82 + 0.36 * nD.r;
+tRock *= 0.92 + 0.16 * nE.r;
+tRock = mix(tRock, tRock * 0.62, smoothstep(0.7, 0.95, nA.b * 0.5 + nD.b * 0.5) * 0.6);
 
 // Growth: meadow, and dark canopy with sunlit speckle.
 vec3 tGrass = mix(vec3(0.20, 0.31, 0.10), vec3(0.38, 0.40, 0.13), nB.g);
@@ -92,7 +101,7 @@ diffuseColor.rgb = tAlbedo;
 `;
 
 const NORMAL_FRAGMENT = /* glsl */ `
-vec3 tBump = (vec3(nA.g * 0.6 + nB.g * 0.4, nC.r, nA.r * 0.5 + nB.r * 0.5) - 0.5) * (0.08 + 0.38 * tRockW);
+vec3 tBump = (vec3(nA.g * 0.5 + nB.g * 0.3 + nD.g * 0.2, nC.r * 0.6 + nE.r * 0.4, nA.r * 0.4 + nB.r * 0.3 + nD.r * 0.3) - 0.5) * (0.1 + 0.62 * tRockW);
 normal = normalize(normal + (viewMatrix * vec4(tBump, 0.0)).xyz);
 `;
 

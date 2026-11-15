@@ -1,8 +1,9 @@
 import { PerspectiveCamera, Scene, WebGLRenderer } from 'three';
+import { ARRIVAL, ArrivalDirector, arrivalSeconds, arrivalStops, createFlight, flightStopId, groundWithSolids, parseFlightStopId, titleOpacity } from '../game/arrival';
 import { createPlay, type Play } from '../game/play';
 import { catalog, findPlace, findStop } from '../places/registry';
 import type { CameraStop } from '../places/types';
-import { showPlaceTitle } from '../ui/place-title';
+import { showArrivalTitle, showPlaceTitle, type ArrivalTitle } from '../ui/place-title';
 import { SceneClock } from './clock';
 import type { RunParams } from './params';
 import { createPipeline } from './pipeline';
@@ -22,6 +23,8 @@ export interface GameProbe {
   catalog: { place: string; dev: boolean; stops: string[] }[];
   /** Cost of the last frame. Budgets are checked against these. */
   stats: { drawCalls: number; triangles: number; geometries: number; textures: number };
+  /** Play mode: 'arrival' during the opening flight, then 'play'. Undefined in view mode. */
+  phase?: 'arrival' | 'play' | undefined;
   /** Hero position in play mode. */
   hero: { x: number; y: number; z: number } | undefined;
 }
@@ -45,14 +48,16 @@ function applyStop(camera: PerspectiveCamera, stop: CameraStop): void {
 export function startApp(canvas: HTMLCanvasElement, uiHost: HTMLElement, params: RunParams): GameProbe {
   const place = findPlace(params.place);
   // A named stop or a frozen frame is a fixed view; otherwise the player is in control.
-  const mode = params.stop !== undefined || params.freeze ? 'view' : 'play';
-  const stop = mode === 'view' ? findStop(place, params.stop) : undefined;
+  // `?arrival-t=` and the catalog's `flight-NN` stops are frozen views of the arrival flight.
+  const flightU = params.arrivalT ?? parseFlightStopId(params.stop);
+  const mode = params.stop !== undefined || params.freeze || flightU !== undefined ? 'view' : 'play';
+  const stop = mode === 'view' && flightU === undefined ? findStop(place, params.stop) : undefined;
 
   const probe: GameProbe = {
     ready: false,
     error: undefined,
     place: place.id,
-    stop: stop?.id,
+    stop: stop?.id ?? (flightU === undefined ? undefined : (params.stop ?? flightStopId(Math.round(flightU * 100)))),
     mode,
     frozen: params.freeze,
     catalog: catalog(),
@@ -67,10 +72,38 @@ export function startApp(canvas: HTMLCanvasElement, uiHost: HTMLElement, params:
   const pipeline = createPipeline(renderer, scene, camera, place.mood);
 
   const instance = place.build({ scene, rng: createRng(seedFrom(place.id)) });
+  const flight = createFlight(arrivalStops(place), groundWithSolids(instance.ground, instance.solids), arrivalSeconds(place));
   let play: Play | undefined;
-  if (stop) applyStop(camera, stop);
-  else play = createPlay({ canvas, scene, camera, place: instance });
-  const removeTitle = params.ui ? showPlaceTitle(uiHost, place.name) : undefined;
+  let removeTitle: (() => void) | undefined;
+  let bigTitle: ArrivalTitle | undefined;
+  const director = mode === 'play' && params.arrival && flight ? new ArrivalDirector(flight, ARRIVAL) : undefined;
+  if (flightU !== undefined) {
+    if (!flight) throw new Error(`Place "${place.id}" has no arrival flight`);
+    const pose = flight.sample(flightU);
+    applyStop(camera, { id: 'flight', position: pose.position, target: pose.target, fov: pose.fov });
+    if (params.ui) {
+      bigTitle = showArrivalTitle(uiHost, place.name);
+      bigTitle.setOpacity(titleOpacity(flightU));
+    }
+  } else if (stop) {
+    applyStop(camera, stop);
+  } else {
+    play = createPlay({
+      canvas,
+      scene,
+      camera,
+      place: instance,
+      arrival: director,
+      // Control passes to the player: the big name gives way to the small corner one.
+      onHandover: () => {
+        bigTitle?.dismiss();
+        bigTitle = undefined;
+        if (params.ui) removeTitle = showPlaceTitle(uiHost, place.name);
+      },
+    });
+  }
+  if (director && params.ui && !bigTitle && director.phase === 'flight') bigTitle = showArrivalTitle(uiHost, place.name);
+  if (!director && !bigTitle && params.ui && !removeTitle) removeTitle = showPlaceTitle(uiHost, place.name);
 
   const resize = (): void => {
     const width = canvas.clientWidth || window.innerWidth;
@@ -102,6 +135,8 @@ export function startApp(canvas: HTMLCanvasElement, uiHost: HTMLElement, params:
       textures: renderer.info.memory.textures,
     };
     probe.hero = play?.heroPosition();
+    probe.phase = play?.phase?.();
+    if (director && bigTitle && director.phase === 'flight') bigTitle.setOpacity(titleOpacity(director.progress));
     if (frames >= SETTLE_FRAMES) probe.ready = true;
     // A frozen view is a still picture: stop drawing once it has settled.
     if (clock.frozen && probe.ready) return;
@@ -113,6 +148,7 @@ export function startApp(canvas: HTMLCanvasElement, uiHost: HTMLElement, params:
     cancelAnimationFrame(handle);
     window.removeEventListener('resize', resize);
     removeTitle?.();
+    bigTitle?.remove();
     play?.dispose();
     instance.dispose();
     pipeline.dispose();

@@ -67,5 +67,10 @@ export interface PlaceDef {
   mood: Mood;
   /** At least one. The first is the default view. */
   stops: readonly CameraStop[];
+  /**
+   * The opening flight. Absent: every stop whose id starts with `arrival-`, in declared order, over 12 s.
+   * `stops` are stop ids of this place. A place with no such stops has no flight.
+   */
+  arrival?: { stops: readonly string[]; seconds?: number };
   build(ctx: PlaceContext): PlaceInstance;
 }

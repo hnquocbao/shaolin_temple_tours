@@ -1,7 +1,8 @@
-import type { PerspectiveCamera, Scene } from 'three';
+import { Vector3, type PerspectiveCamera, type Scene } from 'three';
 import { parseRunParams } from '../engine/params';
 import type { PlaceInstance } from '../places/types';
 import { showControlsHint } from '../ui/controls-hint';
+import type { Pose, ArrivalDirector } from './arrival';
 import { createHeroFigure } from './hero/figure';
 import { CAMERA, orbitOffset, solveCamera } from './player/camera-rig';
 import { NO_INPUT, type HeroInput } from './player/motion';
@@ -15,6 +16,10 @@ export interface Play {
   /** Where the hero is, for the probe and for tests. */
   /** `respawns` counts how often the hero was put back; the play check asserts it stays 0. */
   heroPosition(): { x: number; y: number; z: number; respawns?: number };
+  /** 'arrival' while the opening flight owns the camera and input is ignored, then 'play'. */
+  phase?(): 'arrival' | 'play';
+  /** How far through the arrival flight, 0..1; 1 once it is over. */
+  arrivalProgress?(): number;
   dispose(): void;
 }
 
@@ -23,6 +28,10 @@ export interface PlayContext {
   scene: Scene;
   camera: PerspectiveCamera;
   place: PlaceInstance;
+  /** The opening flight. Absent: the player has control from the first frame. */
+  arrival?: ArrivalDirector;
+  /** Called once when control passes to the player (the flight ended or was skipped). */
+  onHandover?: () => void;
 }
 
 /** Height of the point the camera orbits, above the hero's feet. */
@@ -38,7 +47,7 @@ const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.m
  * Third-person play: the hero (placeholder figure, ST3T-17), movement and the lightness skill (ST3T-15),
  * and an orbit camera. The signature is the contract with app.ts.
  */
-export function createPlay({ canvas, scene, camera, place }: PlayContext): Play {
+export function createPlay({ canvas, scene, camera, place, arrival, onHandover }: PlayContext): Play {
   const world = worldFromPlace(place);
   const sim = createSim(world);
   const figure = createHeroFigure('xuzhu');
@@ -46,7 +55,18 @@ export function createPlay({ canvas, scene, camera, place }: PlayContext): Play 
 
   const params = parseRunParams(window.location.search);
   const uiHost = document.getElementById('ui');
-  const removeHint = uiHost && params.ui ? showControlsHint(uiHost) : undefined;
+  let removeHint: (() => void) | undefined;
+  // The hero is the player's from the moment the flight is over or skipped.
+  const hasControl = (): boolean => arrival === undefined || arrival.phase !== 'flight';
+  let handedOver = false;
+  const checkHandover = (): void => {
+    if (handedOver || !hasControl()) return;
+    handedOver = true;
+    if (uiHost && params.ui) removeHint = showControlsHint(uiHost);
+    onHandover?.();
+  };
+  /** The key that skipped the flight is not game input, however long it is held. */
+  let skipKey: string | undefined;
 
   // ---- input
   const keys = new Set<string>();
@@ -62,11 +82,22 @@ export function createPlay({ canvas, scene, camera, place }: PlayContext): Play 
   };
   const onKeyDown = (e: KeyboardEvent): void => {
     if (typing(e) || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (!hasControl()) {
+      if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
+      skipKey = e.code;
+      arrival?.skip();
+      return;
+    }
+    if (e.code === skipKey) {
+      e.preventDefault();
+      return;
+    }
     if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
     if (e.code === 'Space' && !keys.has('Space')) jumpLatch = true;
     keys.add(e.code);
   };
   const onKeyUp = (e: KeyboardEvent): void => {
+    if (e.code === skipKey) skipKey = undefined;
     if (!typing(e)) keys.delete(e.code);
   };
   const onBlur = (): void => keys.clear();
@@ -80,8 +111,11 @@ export function createPlay({ canvas, scene, camera, place }: PlayContext): Play 
     if (wasLocked && !locked()) keys.clear();
     wasLocked = locked();
   };
+  const onMouseDown = (): void => {
+    if (!hasControl()) arrival?.skip();
+  };
   const onMouseMove = (e: MouseEvent): void => {
-    if (!locked()) return;
+    if (!locked() || !hasControl()) return;
     yaw -= e.movementX * MOUSE_SENSITIVITY;
     pitch = clamp(pitch + e.movementY * MOUSE_SENSITIVITY, CAMERA.minPitch, CAMERA.maxPitch);
   };
@@ -96,6 +130,7 @@ export function createPlay({ canvas, scene, camera, place }: PlayContext): Play 
   };
   const onWheel = (e: WheelEvent): void => {
     e.preventDefault();
+    if (!hasControl()) return;
     wantedDistance = clamp(wantedDistance * Math.exp(e.deltaY * 0.0011), CAMERA.minDistance, CAMERA.maxDistance);
   };
   window.addEventListener('keydown', onKeyDown);
@@ -104,6 +139,7 @@ export function createPlay({ canvas, scene, camera, place }: PlayContext): Play 
   document.addEventListener('visibilitychange', onVisibility);
   document.addEventListener('pointerlockchange', onLockChange);
   window.addEventListener('mousemove', onMouseMove);
+  window.addEventListener('mousedown', onMouseDown);
   canvas.addEventListener('click', onClick);
   canvas.addEventListener('wheel', onWheel, { passive: false });
 
@@ -166,6 +202,24 @@ export function createPlay({ canvas, scene, camera, place }: PlayContext): Play 
   };
   drawHero(0, true);
 
+  /** Let the opening flight (or the blend out of it) overwrite the play camera that drawHero just set. */
+  const fly = (delta: number): void => {
+    if (!arrival || arrival.phase === 'done') return;
+    const { x, y, z } = camera.position;
+    const forward = camera.getWorldDirection(new Vector3());
+    const live: Pose = { position: [x, y, z], target: [x + forward.x * 20, y + forward.y * 20, z + forward.z * 20], fov };
+    const pose = arrival.step(delta, live);
+    camera.position.set(...pose.position);
+    camera.lookAt(...pose.target);
+    if (Math.abs(camera.fov - pose.fov) > 1e-6) {
+      camera.fov = pose.fov;
+      camera.updateProjectionMatrix();
+    }
+    checkHandover();
+  };
+  fly(0);
+  checkHandover();
+
   let lastRespawns = sim.state.respawns;
   return {
     update(_elapsed, delta) {
@@ -178,7 +232,10 @@ export function createPlay({ canvas, scene, camera, place }: PlayContext): Play 
       const respawned = sim.state.respawns !== lastRespawns;
       lastRespawns = sim.state.respawns;
       drawHero(delta, respawned);
+      fly(delta);
     },
+    phase: () => (hasControl() ? 'play' : 'arrival'),
+    arrivalProgress: () => arrival?.progress ?? 1,
     heroPosition: () => ({ x: sim.state.x, y: sim.state.y, z: sim.state.z, respawns: sim.state.respawns }),
     dispose() {
       window.removeEventListener('keydown', onKeyDown);
@@ -187,6 +244,7 @@ export function createPlay({ canvas, scene, camera, place }: PlayContext): Play 
       document.removeEventListener('visibilitychange', onVisibility);
       document.removeEventListener('pointerlockchange', onLockChange);
       window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mousedown', onMouseDown);
       canvas.removeEventListener('click', onClick);
       canvas.removeEventListener('wheel', onWheel);
       if (locked()) document.exitPointerLock();

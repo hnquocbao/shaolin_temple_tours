@@ -72,6 +72,10 @@ export const yard: PlaceDef = {
   stops: [
     { id: 'overview', position: [-80, 50, -75], target: [0, 4, 25], fov: 50 },
     { id: 'spawn', position: [0, 4.2, -49], target: [0, 1.6, -40], fov: 50 },
+    // The opening flight (ST3T-16): high over the yard, then low past the east side, then in behind the hero.
+    { id: 'arrival-1', position: [-90, 46, -88], target: [0, 4, 20], fov: 48 },
+    { id: 'arrival-2', position: [52, 17, -14], target: [-4, 4, 22], fov: 52 },
+    { id: 'arrival-3', position: [0, 11, -62], target: [0, 2.5, -34], fov: 50 },
   ],
   build({ scene }): PlaceInstance {
     const root = new Group();

@@ -204,6 +204,29 @@ async function run(page) {
   expect(track.maxStep < 6, `the hero jumped ${track.maxStep.toFixed(1)} m in one frame (respawn or teleport)`);
 }
 
+/** With the flight enabled: the phase starts as 'arrival', the hero stays put, a key press skips to 'play'. */
+async function runArrival(page, base) {
+  await page.goto(`${base}/?place=${place}&ui=0`, { waitUntil: 'load' });
+  await page.waitForFunction(() => window.__game?.ready === true || window.__game?.error !== undefined, null, { timeout: 120_000 });
+  const read = () => page.evaluate(() => ({ phase: window.__game.phase, hero: window.__game.hero }));
+  const first = await read();
+  if (first.phase !== 'arrival') throw new Stage(`arrival: expected phase "arrival" on entering the place, got "${first.phase}"`);
+  await withTimeout(page.evaluate(() => new Promise((resolve) => {
+    let left = 12;
+    const tick = () => (--left <= 0 ? resolve(undefined) : requestAnimationFrame(tick));
+    requestAnimationFrame(tick);
+  })), 120_000, 'arrival: wait for frames');
+  const during = await read();
+  if (during.phase !== 'arrival') throw new Stage(`arrival: the flight ended by itself after a few frames (phase "${during.phase}")`);
+  const moved = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+  if (moved(first.hero, during.hero) > 0.05) throw new Stage('arrival: the hero moved during the flight');
+  await page.keyboard.press('Space'); // any key skips; the key itself must not make the hero jump
+  await page.waitForFunction(() => window.__game.phase === 'play', null, { polling: 'raf', timeout: 60_000 });
+  const after = await read();
+  if (moved(first.hero, after.hero) > 0.05) throw new Stage('arrival: skipping the flight moved the hero');
+  log('flight starts as "arrival", the hero stays put, a key press hands over to "play"');
+}
+
 async function main() {
   if (!has('--no-build')) {
     const build = spawnSync('pnpm', ['build'], { cwd: root, stdio: 'inherit' });
@@ -267,12 +290,13 @@ async function main() {
     });
 
     console.log(`play-check: ${place} at ${width}x${height}`);
-    await page.goto(`${base}/?place=${place}${has('--ui') ? '' : '&ui=0'}`, { waitUntil: 'load' });
+    await page.goto(`${base}/?place=${place}&arrival=0${has('--ui') ? '' : '&ui=0'}`, { waitUntil: 'load' });
     await page.waitForFunction(() => window.__game?.ready === true || window.__game?.error !== undefined, null, { timeout: 120_000 });
     const probe = await page.evaluate(() => window.__game);
     if (probe.error) problems.push(`game error: ${probe.error}`);
     if (probe.mode !== 'play') problems.push(`expected play mode, got ${probe.mode}`);
     if (problems.length === 0) await run(page);
+    if (problems.length === 0) await runArrival(page, base);
   } catch (cause) {
     problems.push(cause instanceof Error ? cause.message : String(cause));
     if (serverLog.trim()) console.error(serverLog.trim().split('\n').slice(-10).join('\n'));

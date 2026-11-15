@@ -21,7 +21,12 @@ describe('place registry', () => {
 
   it('lists every stop in the catalog', () => {
     const total = places.reduce((n, p) => n + p.stops.length, 0);
-    expect(catalog().reduce((n, c) => n + c.stops.length, 0)).toBe(total);
+    const flightViews = catalog().reduce((n, c) => n + c.stops.filter((s) => s.startsWith('flight-')).length, 0);
+    expect(catalog().reduce((n, c) => n + c.stops.length, 0)).toBe(total + flightViews);
+    for (const c of catalog()) {
+      const place = places.find((p) => p.id === c.place)!;
+      expect(c.stops.slice(0, place.stops.length)).toEqual(place.stops.map((s) => s.id));
+    }
   });
 
   it('Shaolin keeps the stops other tickets rely on', () => {

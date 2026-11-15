@@ -70,9 +70,9 @@ describe('Shaolin in play mode', () => {
 describe('dev yard', () => {
   const w = worldOf(yard);
 
-  it('is a dev place with the two stops the tools use', () => {
+  it('is a dev place with the two stops (and an arrival flight) the tools use', () => {
     expect(yard.dev).toBe(true);
-    expect(yard.stops.map((s) => s.id)).toEqual(['overview', 'spawn']);
+    expect(yard.stops.map((s) => s.id).slice(0, 2)).toEqual(['overview', 'spawn']);
   });
 
   it('can be walked up the stepped mound and down again', () => {

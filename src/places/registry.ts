@@ -1,4 +1,5 @@
 import type { CameraStop, PlaceDef } from './types';
+import { ARRIVAL, arrivalStops, flightStopId } from '../game/arrival';
 import { grove } from './grove';
 import { kitYard } from './kit-yard';
 import { shaolin } from './shaolin';
@@ -22,9 +23,16 @@ export function findStop(place: PlaceDef, id: string | undefined): CameraStop {
   return stop;
 }
 
-/** What the screenshot tool reads to know every view that exists. */
+/**
+ * What the screenshot tool reads to know every view that exists. A place with an arrival flight also lists
+ * frozen views of it (`flight-00` ... `flight-100`), which the app resolves to the flight camera.
+ */
 export function catalog(): { place: string; dev: boolean; stops: string[] }[] {
-  return places.map((p) => ({ place: p.id, dev: p.dev === true, stops: p.stops.map((s) => s.id) }));
+  return places.map((p) => ({
+    place: p.id,
+    dev: p.dev === true,
+    stops: [...p.stops.map((s) => s.id), ...(arrivalStops(p).length > 0 ? ARRIVAL.shotPercents.map(flightStopId) : [])],
+  }));
 }
 
 /** Problems in the place data. Empty means valid. Used by tests. */
@@ -38,6 +46,11 @@ export function validatePlaces(list: readonly PlaceDef[]): string[] {
     seenPlaces.add(p.id);
     if (!p.name.zh || !p.name.vi || !p.name.en) problems.push(`place "${p.id}" needs zh, vi and en names`);
     if (p.stops.length === 0) problems.push(`place "${p.id}" has no camera stops`);
+    if (p.arrival) {
+      const known = new Set(p.stops.map((s) => s.id));
+      for (const id of p.arrival.stops) if (!known.has(id)) problems.push(`arrival stop "${id}" in "${p.id}" is not a stop of the place`);
+      if (p.arrival.seconds !== undefined && !(p.arrival.seconds > 0)) problems.push(`arrival seconds in "${p.id}" must be positive`);
+    }
     const seenStops = new Set<string>();
     for (const s of p.stops) {
       if (!idPattern.test(s.id)) problems.push(`stop id "${s.id}" in "${p.id}" is not lower-case kebab`);

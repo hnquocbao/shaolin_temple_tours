@@ -429,7 +429,7 @@ export function buildShaolinTerrainMesh(terrain: ShaolinTerrain, seed: number): 
     m.makeScale(b.w, b.thick, b.d);
     m.setPosition(b.x, b.top - b.thick / 2, b.z);
     treads.setMatrixAt(n, m);
-    treads.setColorAt(n, tint.setRGB(0.6 * b.shade, 0.53 * b.shade, 0.43 * b.shade));
+    treads.setColorAt(n, tint.setRGB(0.47 * b.shade, 0.43 * b.shade, 0.37 * b.shade));
   });
   treads.instanceMatrix.needsUpdate = true;
   if (treads.instanceColor) treads.instanceColor.needsUpdate = true;

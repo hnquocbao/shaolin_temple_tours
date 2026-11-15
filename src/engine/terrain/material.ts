@@ -58,8 +58,8 @@ float tS2 = texture2D(tNoise, vec2((tP.x - tP.z) * 0.0131 + 0.3, tP.y * 0.17 + t
 float tStrata = mix(tS1, tS2, 0.35 + 0.35 * nB.r);
 float tBands = texture2D(tNoise, vec2((tP.x - tP.z) * 0.0173 + nA.b * 0.1, tP.y * 0.29 + nB.r * 0.5)).g;
 float tStreak = texture2D(tNoise, vec2((tP.x + tP.z) * 0.09, tP.y * 0.008 + nA.r * 0.2)).g;
-vec3 rockLit = vec3(0.56, 0.47, 0.37);
-vec3 rockDark = vec3(0.27, 0.25, 0.26);
+vec3 rockLit = vec3(0.40, 0.33, 0.26);
+vec3 rockDark = vec3(0.17, 0.16, 0.17);
 vec3 tRock = mix(rockDark, rockLit, clamp(tStrata * 0.8 + tBands * 0.3, 0.0, 1.0));
 tRock = mix(tRock, vec3(0.52, 0.30, 0.17), smoothstep(0.55, 0.85, tStreak) * 0.5);
 tRock *= 1.0 - 0.3 * pow(nB.b, 3.0);
@@ -95,7 +95,7 @@ tAlbedo = mix(tAlbedo, vec3(0.42, 0.28, 0.17) * (0.8 + 0.4 * nC.a), tEarth);
 // Paved and built ground: terraces and the path.
 vec2 tSlab = abs(fract(tP.xz * vec2(0.25, 0.22)) - 0.5);
 float tJoint = smoothstep(0.455, 0.49, max(tSlab.x, tSlab.y));
-vec3 tStone = vec3(0.66, 0.58, 0.47) * (0.84 + 0.24 * nB.r) * (0.9 + 0.2 * nC.a) * (1.0 - 0.28 * tJoint);
+vec3 tStone = vec3(0.47, 0.43, 0.37) * (0.84 + 0.24 * nB.r) * (0.9 + 0.2 * nC.a) * (1.0 - 0.28 * tJoint);
 tAlbedo = mix(tAlbedo, tStone, vMat.x * smoothstep(0.7, 0.95, tSlope));
 diffuseColor.rgb = tAlbedo;
 `;

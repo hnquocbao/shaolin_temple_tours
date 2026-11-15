@@ -123,9 +123,11 @@ describe('shade is lifted, cool and never black', () => {
   const grey: [number, number, number] = [0.216, 0.216, 0.216]; // sRGB mid-grey (0x808080) in linear light
   const red: [number, number, number] = [0.45, 0.07, 0.05]; // a mid-toned red wall
 
-  it('a mid-grey wall in full shade stays above luma 0.25 on screen and leans blue', () => {
+  // Thresholds set by the controller's regrade (ST3T-12): the sun was raised and strengthened so lit ground
+  // stands apart from shade, which lowers exposure; shade is darker than the first pass but still clearly readable.
+  it('a mid-grey wall in full shade stays above luma 0.18 on screen and leans blue', () => {
     const d = toDisplay(wallInShade(grey, mood), mood);
-    expect(displayLuma(d)).toBeGreaterThan(0.25);
+    expect(displayLuma(d)).toBeGreaterThan(0.18);
     expect(d[2]).toBeGreaterThan(d[0]);
   });
 
@@ -140,6 +142,6 @@ describe('shade is lifted, cool and never black', () => {
 
   it('even a very dark surface in shade is not crushed to black', () => {
     const coal = toDisplay(wallInShade([0.05, 0.05, 0.05], mood), mood);
-    expect(displayLuma(coal)).toBeGreaterThan(0.07);
+    expect(displayLuma(coal)).toBeGreaterThan(0.05);
   });
 });

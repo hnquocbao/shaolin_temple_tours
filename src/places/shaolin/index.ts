@@ -1,6 +1,7 @@
 import { Group } from 'three';
 import type { Mood } from '../../engine/mood';
 import { createRng, seedFrom } from '../../engine/rng';
+import { buildVegetation, scatterMountainForest, trunkSolids, type Placement, type Zone } from '../../engine/vegetation';
 import {
   createGate,
   createHall,
@@ -15,7 +16,7 @@ import {
 } from '../../kit';
 import type { CameraStop, PlaceDef, PlaceInstance, Solid } from '../types';
 import { layout, positionOf, wallRuns, yawOf, type LayoutBuilding, type PaletteName } from './layout';
-import { buildShaolinTerrainMesh, createShaolinTerrain } from './terrain';
+import { buildShaolinTerrainMesh, createShaolinTerrain, terraces } from './terrain';
 
 const palettes: Record<PaletteName, Palette> = {
   vermilion: templePalette,
@@ -48,16 +49,16 @@ export function buildLayoutBuilding(b: LayoutBuilding): Building {
  * filling the valleys about 80 m below the first terrace. Everything else is in the air, not in the geometry.
  */
 const goldenHour: Mood = {
-  sunPosition: [-906, 156, -423],
-  sunColor: 0xffbf80,
-  sunIntensity: 5.2,
-  skyLight: 0x93a8d0,
-  groundLight: 0xb08868,
-  ambientIntensity: 3.0,
+  sunPosition: [-906, 265, -423],
+  sunColor: 0xffb873,
+  sunIntensity: 9,
+  skyLight: 0x8ea2cc,
+  groundLight: 0x9c7a58,
+  ambientIntensity: 2.8,
   horizonColor: 0xf2c394,
   fogNear: 180,
   fogFar: 900,
-  exposure: 1,
+  exposure: 0.9,
   sky: {
     zenith: 0x4f77b3,
     mid: 0xa7b7d6,
@@ -70,10 +71,10 @@ const goldenHour: Mood = {
   },
   haze: {
     shade: 0x7b8fbe,
-    density: 0.0009,
+    density: 0.0015,
     heightScale: 300,
     baseY: 0,
-    lowDensity: 0.0005,
+    lowDensity: 0.0011,
     lowHeightScale: 55,
     lowBaseY: 0,
     floorY: -60,
@@ -90,7 +91,7 @@ const goldenHour: Mood = {
   },
   shafts: { strength: 0.3, decay: 0.945, color: 0xffc27f },
   bloom: { strength: 0.28, threshold: 1.15 },
-  grade: { shadowTint: 0xdbe5ff, highlightTint: 0xfff1da, saturation: 1.2, contrast: 1.07, vignette: 0.28 },
+  grade: { shadowTint: 0xd3deff, highlightTint: 0xffeed2, saturation: 1.05, contrast: 1.1, vignette: 0.3 },
   shadow: { min: [-75, -35, -35], max: [75, 70, 300], mapSize: 4096 },
 };
 
@@ -108,10 +109,52 @@ interface Placed {
   radius: number;
 }
 
+/** Half-width of the lane beside each hall that the walking routes use (x = 22). Trees stay out of it. */
+const LANE_X = 22;
+const LANE_HALF = 3.5;
+
+/**
+ * Hand-placed courtyard trees: pairs of cypresses before each hall, pines further out, autumn trees by the walls,
+ * and one great ginkgo in the forecourt. Candidates that would stand in a building, on its steps or in a walking
+ * lane are dropped, so the layout can change without trees ending up inside halls.
+ */
+export function courtyardTrees(placed: readonly Placed[]): Placement[] {
+  const clear = (x: number, z: number, margin: number): boolean => {
+    if (Math.abs(Math.abs(x) - LANE_X) < LANE_HALF) return false;
+    if (Math.abs(x) < 4) return false; // the central axis stays open
+    for (const p of placed) {
+      const [lx, lz] = toLocal(x, z, [p.x, p.base, p.z], p.yaw);
+      if (Math.abs(lx) < p.reachX + margin && Math.abs(lz) < p.reachZ + margin) return false;
+    }
+    return true;
+  };
+  const out: Placement[] = [];
+  const add = (p: Placement, margin: number): void => {
+    if (clear(p.x, p.z, margin)) out.push(p);
+  };
+  for (const terrace of terraces) {
+    const t = { z: (terrace.flat.minZ + terrace.flat.maxZ) / 2 };
+    for (const side of [-1, 1]) {
+      for (const dz of [-15, -5]) {
+        add({ species: 'cypress', x: side * 9, z: t.z + dz, scale: 1.25 }, 2.5);
+        add({ species: 'cypress', x: side * 15.5, z: t.z + dz, scale: 1.1 }, 2.5);
+        add({ species: 'pine', x: side * 30, z: t.z + dz + 2, scale: 1.3 }, 4);
+      }
+      add({ species: 'broadleaf', x: side * 51, z: t.z - 14, scale: 1.2, color: side < 0 ? 0xd08a2a : 0xc8642a }, 4);
+      add({ species: 'broadleaf', x: side * 51, z: t.z + 14, scale: 1.1, color: 0xd9a531 }, 4);
+      add({ species: 'pine', x: side * 44, z: t.z + 15, scale: 1.2 }, 4);
+    }
+  }
+  // The ancient ginkgo of the forecourt, in full autumn gold.
+  const first = terraces[0]!;
+  add({ species: 'broadleaf', x: 13, z: (first.flat.minZ + first.flat.maxZ) / 2 + 4, scale: 2.3, color: 0xe2b02e }, 5);
+  return out;
+}
+
 /**
  * Shaolin Temple on Mount Shaoshi.
  *
- * ST3T-11 gave it its ground (`terrain.ts`), ST3T-12 its atmosphere and ST3T-13 the building kit.
+ * ST3T-20 adds the forest and courtyard trees. ST3T-11 gave it its ground (`terrain.ts`), ST3T-12 its atmosphere and ST3T-13 the building kit.
  * ST3T-14 fills the terraces from the kit: the layout is data in `layout.ts`.
  */
 export const shaolin: PlaceDef = {
@@ -154,6 +197,27 @@ export const shaolin: PlaceDef = {
       solids.push(...placeSolids(wall.solids, [0, run.base, 0], 0));
     }
 
+    // Trees: forest on the slopes and spire tops around the compound, hand-placed trees in the courtyards.
+    const courtyard = courtyardTrees(placed);
+    const keepOut: Zone[] = [
+      { kind: 'box', minX: -62, maxX: 62, minZ: -24, maxZ: 310 }, // the terrace stack: only hand-placed trees here
+      { kind: 'corridor', points: [[0, -270], [0, -19]], halfWidth: 6 }, // the stone stair
+    ];
+    const trees = scatterMountainForest({
+      heightAt: terrain.heightAt,
+      bounds: { minX: -520, maxX: 520, minZ: -420, maxZ: 640 },
+      rng: createRng(seedFrom('shaolin-forest')),
+      exclusions: keepOut,
+      explicit: courtyard,
+      density: 0.06,
+      minY: -30, // nothing under the cloud sea
+    });
+    const vegetation = buildVegetation(trees, {
+      lod: { focus: terraces.map((t): [number, number, number] => [t.centerX, t.top, t.centerZ]), near: 75 },
+    });
+    root.add(vegetation.root);
+    solids.push(...trunkSolids(trees.filter((t) => t.explicit)));
+
     scene.add(root);
 
     const heightAt = (x: number, z: number): number => {
@@ -175,8 +239,12 @@ export const shaolin: PlaceDef = {
       ground: { heightAt },
       solids,
       spawn: { position: [0, terrain.heightAt(0, -40), -40], facing: 0 },
+      update(elapsed) {
+        vegetation.update(elapsed);
+      },
       dispose() {
         scene.remove(root);
+        vegetation.dispose();
         land.dispose();
         for (const b of buildings) b.dispose();
       },

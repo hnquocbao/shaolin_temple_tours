@@ -3,18 +3,55 @@ import type { Mood } from '../../engine/mood';
 import type { PlaceDef, PlaceInstance, Solid } from '../types';
 import { TERRACE_COUNT, buildShaolinTerrainMesh, createShaolinTerrain, terraces } from './terrain';
 
-/** Golden hour: low warm sun from the south-west, cool shade, warm haze. */
+/**
+ * Golden hour: a low warm sun from the north-west, cool blue shade, warm haze, and a sea of cloud
+ * filling the valleys about 80 m below the first terrace. Everything else is in the air, not in the geometry.
+ */
 const goldenHour: Mood = {
-  sunPosition: [-300, 140, -200],
-  sunColor: 0xffc98f,
-  sunIntensity: 2.6,
-  skyLight: 0xffe2bd,
-  groundLight: 0x4a5568,
+  sunPosition: [-757, 156, 635],
+  sunColor: 0xffbf80,
+  sunIntensity: 3.4,
+  skyLight: 0x8aa4d6,
+  groundLight: 0x7a5f4a,
   ambientIntensity: 0.9,
-  horizonColor: 0xe9b98a,
+  horizonColor: 0xf2c394,
   fogNear: 180,
   fogFar: 900,
   exposure: 1,
+  sky: {
+    zenith: 0x4f77b3,
+    mid: 0xa7b7d6,
+    horizonWarm: 0xffc58a,
+    horizonCool: 0xcdb4c6,
+    glow: 0xffae62,
+    sunDisc: 28,
+    sunRadius: 1.4,
+    cloudiness: 0.55,
+  },
+  haze: {
+    shade: 0x7b8fbe,
+    density: 0.0009,
+    heightScale: 300,
+    baseY: 0,
+    lowDensity: 0.0005,
+    lowHeightScale: 55,
+    lowBaseY: 0,
+    floorY: -60,
+  },
+  cloudSea: {
+    topY: -38,
+    topVariation: 14,
+    bottomY: -150,
+    density: 0.05,
+    scale: 1500,
+    drift: [1.8, 0.7],
+    litColor: 0xfff0dc,
+    shadeColor: 0x7d92c6,
+  },
+  shafts: { strength: 0.3, decay: 0.945, color: 0xffc27f },
+  bloom: { strength: 0.28, threshold: 1.15 },
+  grade: { shadowTint: 0xc4d2f2, highlightTint: 0xfff0d6, saturation: 1.12, contrast: 1.06, vignette: 0.28 },
+  shadow: { min: [-75, -35, -35], max: [75, 70, 300], mapSize: 4096 },
 };
 
 /**
@@ -28,8 +65,8 @@ export const shaolin: PlaceDef = {
   name: { zh: '少室山少林寺', vi: 'Thiếu Lâm Tự, núi Thiếu Thất', en: 'Shaolin Temple, Mount Shaoshi' },
   mood: goldenHour,
   stops: [
-    { id: 'arrival-1', position: [-220, 150, -260], target: [0, 20, 120], fov: 45 },
-    { id: 'arrival-2', position: [160, 90, -120], target: [0, 15, 140], fov: 45 },
+    { id: 'arrival-1', position: [-175, 105, -215], target: [10, 24, 120], fov: 45 },
+    { id: 'arrival-2', position: [170, 70, -100], target: [-155, 38, 230], fov: 45 },
     { id: 'arrival-3', position: [0, 34, -110], target: [0, 16, 60], fov: 50 },
     { id: 'gate-front', position: [0, 3, -42], target: [0, 6, 0], fov: 55 },
   ],

@@ -39,3 +39,17 @@ Shared hot spots: `src/places/shaolin/index.ts` (owned by Lane A first, then B),
 | 15 Nov | ST3T-15 | Landed after review: movement, lightness leap, camera, play check in the gate. Review found six collision and camera bugs; fixed |
 | 15 Nov | ST3T-20 | Added to the sprint: trees and foliage. The first terrain shots showed bare rock; the mood images are full of trees |
 | 15 Nov | ST3T-14, 16, 20 | Started in parallel lanes on base 4c2e4b5 |
+| 15 Nov | ST3T-14 | Landed after review: Shaolin layout, 25 buildings on seven terraces. Review fix: step reach measured per building |
+| 15 Nov | ST3T-20 | Landed after review: trees and foliage; forest and courtyard trees in Shaolin. Review fixes: tree detail near the stair and arrival views, courtyard tree tests |
+| 15 Nov | ST3T-12 | Closed: controller regrade with buildings and trees in frame (higher, stronger sun; darker rock and paving; denser haze) |
+| 15 Nov | ST3T-16 | Merged; review requested changes (vertical jolts over cliffs, unclamped skip blend, weak play check). Fixes in progress |
+| 15 Nov | — | Full gate passes on the combined game: 249 tests, 38 views, play check. Pictures in `docs/media/sprint-1/` |
+
+## Known gaps after the build (candidates for Sprint 2)
+
+- Trees are low-poly and blobby up close; shrubs alone cost about 590k triangles.
+- Mountains are still pale and mostly bare where slopes are steep.
+- Buildings and walls are clean: no weathering, moss or painted detail; courtyards have no props.
+- A frame is about 2.1M triangles and 325 draw calls. Fine for a desktop GPU, untested on real hardware.
+- Building the forest takes several seconds at start-up with no loading screen.
+- Mouse look under pointer lock is untested (cannot be exercised headlessly).

@@ -50,3 +50,16 @@ After every ticket the controller adds one entry. Entries that change how we wor
 - What happened: the movement lane's tests assumed the placeholder Shaolin that the terrain lane was replacing, so the combined gate failed although each lane's own gate passed. A scripted conflict resolution also left a duplicated line in the place registry.
 - Learned: a lane's tests must not depend on a file another lane owns. Resolve conflicts by hand and run the gate before committing the resolution.
 - Changed: briefs tell lanes to test against their own dev place, and to treat another lane's place as read-only for tests too.
+
+### ST3T-12, ST3T-14, ST3T-20 — Regrade, layout and trees (15 Nov 2026)
+- What happened: the controller's first regrade cut the ambient fill to gain contrast and the shade tests failed: shaded walls would have gone near-black again.
+- Learned: the flat, pale look came from a sun too low to light the ground, not from too much fill. Tests that pin a visual property in numbers stop a later pass from undoing an earlier fix.
+- Changed: sun raised and strengthened instead; the shade thresholds were lowered a little, with the reason written in the test.
+
+- What happened: with three agents shooting at once on four cores, a heavy test timed out and a gate run took over ten minutes.
+- Learned: the software renderer makes the machine the bottleneck. Parallel lanes should not all run the full gate at the same time.
+- Changed: the gate shoots at quarter size; test timeout is 60 s; `pnpm shoot -- --stops a,b` renders chosen views only. Briefs should ask lanes to shoot only their own place while iterating and run the full gate once at the end.
+
+- What happened: the layout hit its triangle and draw-call limits before trees existed, then trees doubled the triangle count.
+- Learned: set budgets for the finished scene and split them between parts up front.
+- Changed: nothing yet. A performance pass with a per-part budget is proposed for Sprint 2.

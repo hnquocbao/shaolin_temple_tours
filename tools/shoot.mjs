@@ -4,6 +4,7 @@
 //   pnpm shoot                       build, then shoot everything
 //   pnpm shoot -- --no-build         shoot the existing dist/
 //   pnpm shoot -- --place shaolin    one place
+//   pnpm shoot -- --stops arrival-2,rooftops   only these stops (of any place that has them)
 //   pnpm shoot -- --out shots/ST3T-12
 //   pnpm shoot -- --size 960x540     quarter-size frames (what the gate runs)
 import { spawn, spawnSync } from 'node:child_process';
@@ -31,6 +32,7 @@ if (sizeArg && !sizeMatch) throw new Error(`--size must look like 960x540, got "
 const VIEW = sizeMatch ? { width: Number(sizeMatch[1]), height: Number(sizeMatch[2]) } : { width: 1920, height: 1080 };
 const outDir = path.resolve(root, value('--out') ?? 'shots');
 const onlyPlace = value('--place');
+const onlyStops = value('--stops')?.split(',').map((id) => id.trim()).filter(Boolean);
 const READY_TIMEOUT = 120_000; // software rendering in CI is slow
 
 function fail(message) {
@@ -122,8 +124,11 @@ async function main() {
     await page.goto(`${base}/?freeze=1&ui=0`, { waitUntil: 'load' });
     await page.waitForFunction(() => window.__game !== undefined, null, { timeout: READY_TIMEOUT });
     const catalog = await page.evaluate(() => window.__game.catalog);
-    const wanted = catalog.filter((c) => !onlyPlace || c.place === onlyPlace);
-    if (wanted.length === 0) return fail(onlyPlace ? `no place "${onlyPlace}"` : 'the game lists no places');
+    const wanted = catalog
+      .filter((c) => !onlyPlace || c.place === onlyPlace)
+      .map((c) => ({ ...c, stops: onlyStops ? c.stops.filter((id) => onlyStops.includes(id)) : c.stops }))
+      .filter((c) => c.stops.length > 0);
+    if (wanted.length === 0) return fail(onlyPlace || onlyStops ? 'no place or stop matches the filter' : 'the game lists no places');
 
     const report = [];
     let firstShot;

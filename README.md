@@ -4,7 +4,17 @@ A browser role-playing game for friends who love Jin Yong's *Demi-Gods and Semi-
 
 A non-commercial fan project, not affiliated with the Jin Yong estate, the temple, or any existing adaptation.
 
-Status: planning. No application code yet.
+Status: Sprint 1 in progress. The project scaffold and screenshot harness exist; the scene is still a gray placeholder.
+
+## Run it
+
+```bash
+pnpm install
+pnpm dev        # open the printed address
+pnpm gate       # typecheck, lint, tests, build, screenshots
+```
+
+Any view can be opened by link: `?place=shaolin&stop=arrival-1`. Add `&freeze=1` for a repeatable still frame and `&ui=0` to hide the interface. `pnpm shoot` writes a picture of every view to `shots/`.
 
 - [Game design: heroes, places, art direction](docs/game-design.md)
 - [Technical approach and research](docs/approach.md)

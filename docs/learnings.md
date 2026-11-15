@@ -63,3 +63,12 @@ After every ticket the controller adds one entry. Entries that change how we wor
 - What happened: the layout hit its triangle and draw-call limits before trees existed, then trees doubled the triangle count.
 - Learned: set budgets for the finished scene and split them between parts up front.
 - Changed: nothing yet. A performance pass with a per-part budget is proposed for Sprint 2.
+
+### ST3T-16 — Arrival vista (15 Nov 2026)
+- What happened: the flight was developed against the placeholder scene, and its tests ran on flat ground. On the real terrain the camera jolted several metres where the path crossed a cliff, and nothing caught it until the review probed the real place.
+- Learned: camera and movement features must be tested against the real place they will run in, not only a flat test ground.
+- Changed: `test/arrival-shaolin.test.ts` checks the real Shaolin flight. Briefs for anything that moves through a place now require a test on the real place once it exists.
+
+- What happened: fixing the flight meant moving the arrival viewpoints, which would have dropped the best picture so far.
+- Learned: a camera stop can be both a flight waypoint and a composed still; changing one changes the other.
+- Changed: composed stills that should survive get their own stop (`haze-vista`), separate from the `arrival-*` waypoints.

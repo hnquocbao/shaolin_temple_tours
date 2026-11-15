@@ -4,7 +4,7 @@ A browser role-playing game for friends who love Jin Yong's *Demi-Gods and Semi-
 
 A non-commercial fan project, not affiliated with the Jin Yong estate, the temple, or any existing adaptation.
 
-Status: Sprint 1 in progress. Mount Shaoshi terrain, golden-hour atmosphere, the building kit and third-person movement with the lightness leap are in. The temple itself, trees and the arrival flight are being built.
+Status: Sprint 1 build is complete apart from the private preview and the character trial. Shaolin on Mount Shaoshi can be flown over and explored as a placeholder Xuzhu. Pictures: `docs/media/sprint-1/shaolin/`.
 
 ## Run it
 

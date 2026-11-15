@@ -1,17 +1,26 @@
-import {
-  BoxGeometry,
-  Color,
-  ConeGeometry,
-  DirectionalLight,
-  Fog,
-  Group,
-  HemisphereLight,
-  Mesh,
-  MeshStandardMaterial,
-  PlaneGeometry,
-} from 'three';
+import { BoxGeometry, ConeGeometry, Group, Mesh, MeshStandardMaterial, PlaneGeometry } from 'three';
+import type { Mood } from '../../engine/mood';
 import { range } from '../../engine/rng';
-import type { PlaceDef, PlaceInstance } from '../types';
+import type { PlaceDef, PlaceInstance, Solid } from '../types';
+
+/** Golden hour: low warm sun from the south-west, cool shade, warm haze. */
+const goldenHour: Mood = {
+  sunPosition: [-300, 140, -200],
+  sunColor: 0xffc98f,
+  sunIntensity: 2.6,
+  skyLight: 0xffe2bd,
+  groundLight: 0x4a5568,
+  ambientIntensity: 0.9,
+  horizonColor: 0xe9b98a,
+  fogNear: 180,
+  fogFar: 900,
+  exposure: 1,
+};
+
+const TERRACES = 7;
+const TERRACE_DEPTH = 44;
+const TERRACE_HALF_WIDTH = 60;
+const terraceHeight = (i: number): number => 3 + i * 3.2;
 
 /**
  * Shaolin Temple on Mount Shaoshi.
@@ -23,6 +32,7 @@ import type { PlaceDef, PlaceInstance } from '../types';
 export const shaolin: PlaceDef = {
   id: 'shaolin',
   name: { zh: '少室山少林寺', vi: 'Thiếu Lâm Tự, núi Thiếu Thất', en: 'Shaolin Temple, Mount Shaoshi' },
+  mood: goldenHour,
   stops: [
     { id: 'arrival-1', position: [-220, 150, -260], target: [0, 20, 120], fov: 45 },
     { id: 'arrival-2', position: [160, 90, -120], target: [0, 15, 140], fov: 45 },
@@ -32,25 +42,6 @@ export const shaolin: PlaceDef = {
   build({ scene, rng }): PlaceInstance {
     const root = new Group();
     root.name = 'shaolin';
-
-    scene.background = new Color(0xe9b98a);
-    scene.fog = new Fog(0xe9b98a, 180, 900);
-
-    const hemi = new HemisphereLight(0xffe2bd, 0x4a5568, 0.9);
-    const sun = new DirectionalLight(0xffc98f, 2.6);
-    sun.position.set(-300, 140, -200);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.bias = -0.0004;
-    sun.shadow.normalBias = 0.6;
-    const cam = sun.shadow.camera;
-    cam.left = -260;
-    cam.right = 260;
-    cam.top = 260;
-    cam.bottom = -260;
-    cam.near = 10;
-    cam.far = 900;
-    root.add(hemi, sun, sun.target);
 
     const stone = new MeshStandardMaterial({ color: 0x8d8a84, roughness: 0.95 });
     const wall = new MeshStandardMaterial({ color: 0x9a4a3a, roughness: 0.85 });
@@ -66,12 +57,12 @@ export const shaolin: PlaceDef = {
     root.add(ground);
 
     // Seven terraces rising along +z, each with one hall: a stand-in for the central axis.
-    const terraces = 7;
-    for (let i = 0; i < terraces; i++) {
-      const height = 3 + i * 3.2;
-      const depth = 44;
+    const solids: Solid[] = [];
+    for (let i = 0; i < TERRACES; i++) {
+      const height = terraceHeight(i);
+      const depth = TERRACE_DEPTH;
       const z = i * depth;
-      const terrace = new Mesh(new BoxGeometry(120, height, depth), stone);
+      const terrace = new Mesh(new BoxGeometry(TERRACE_HALF_WIDTH * 2, height, depth), stone);
       terrace.position.set(0, height / 2, z);
       terrace.receiveShadow = true;
       terrace.castShadow = true;
@@ -89,6 +80,10 @@ export const shaolin: PlaceDef = {
       cap.position.set(0, height + hallHeight + 2.75, z);
       cap.castShadow = true;
 
+      solids.push({
+        min: [-hallWidth / 2, height, z - 7],
+        max: [hallWidth / 2, height + hallHeight, z + 7],
+      });
       geometries.push(terrace.geometry, body.geometry, cap.geometry);
       root.add(terrace, body, cap);
     }
@@ -110,12 +105,20 @@ export const shaolin: PlaceDef = {
 
     return {
       root,
+      // Placeholder ground: flat outside, stepped terraces along the axis.
+      ground: {
+        heightAt(x, z) {
+          if (Math.abs(x) > TERRACE_HALF_WIDTH) return 0;
+          const i = Math.floor((z + TERRACE_DEPTH / 2) / TERRACE_DEPTH);
+          return i < 0 || i >= TERRACES ? 0 : terraceHeight(i);
+        },
+      },
+      solids,
+      spawn: { position: [0, 0, -40], facing: 0 },
       dispose() {
         scene.remove(root);
         for (const g of geometries) g.dispose();
         for (const m of materials) m.dispose();
-        scene.fog = null;
-        scene.background = null;
       },
     };
   },

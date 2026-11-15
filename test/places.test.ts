@@ -34,6 +34,7 @@ describe('validatePlaces', () => {
   const base: PlaceDef = {
     id: 'test-place',
     name: { zh: '测', vi: 'Thử', en: 'Test' },
+    mood: findPlace('shaolin').mood,
     stops: [{ id: 'a', position: [0, 1, 0], target: [0, 0, 5] }],
     build: () => {
       throw new Error('not built in tests');

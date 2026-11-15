@@ -20,8 +20,8 @@ export function findStop(place: PlaceDef, id: string | undefined): CameraStop {
 }
 
 /** What the screenshot tool reads to know every view that exists. */
-export function catalog(): { place: string; stops: string[] }[] {
-  return places.map((p) => ({ place: p.id, stops: p.stops.map((s) => s.id) }));
+export function catalog(): { place: string; dev: boolean; stops: string[] }[] {
+  return places.map((p) => ({ place: p.id, dev: p.dev === true, stops: p.stops.map((s) => s.id) }));
 }
 
 /** Problems in the place data. Empty means valid. Used by tests. */

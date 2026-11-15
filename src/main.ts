@@ -13,10 +13,12 @@ try {
     ready: false,
     error: message,
     place: '',
-    stop: '',
+    stop: undefined,
+    mode: 'view',
     frozen: false,
     catalog: [],
     stats: { drawCalls: 0, triangles: 0, geometries: 0, textures: 0 },
+    hero: undefined,
   };
   console.error(message);
   if (ui) {

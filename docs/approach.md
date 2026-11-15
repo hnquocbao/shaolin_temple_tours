@@ -1,89 +1,81 @@
-# Approach: how we build the Shaolin Temple 3D tour
+# Approach: how we build the game
 
-Status: **proposed** (15 Nov 2026). Decisions marked "open" need the product owner.
-
-## Goal
-
-A friend who loves Shaolin but has never been there opens a link on a phone or laptop, walks the real temple from the Mountain Gate to the Thousand Buddha Hall, and ends up wanting to book the trip.
+Status: **proposed** (15 Nov 2026). Replaces the earlier "accurate 3D tour" approach after the project became a role-playing game set in Jin Yong's *Demi-Gods and Semi-Devils*. What the game is: `docs/game-design.md`.
 
 ## Decision
 
-Build a **code-authored, measured model of the real compound in three.js**, and carry the "this is real" feeling with **real photographs placed at the real spots** and **sound**.
+A chapter-based, third-person game in **three.js**, with scenery generated in code and a look built on atmosphere: cloud sea, layered haze, warm light against cool fog.
 
 | Layer | Choice | Why |
 |---|---|---|
-| Engine | three.js (pin one exact version, r187 at time of writing), `WebGLRenderer` | Runs on Safari, Firefox and phones. Keeps the door open for Gaussian splats: Spark, the best three.js splat renderer, is WebGL2-only |
-| Language and build | TypeScript (strict), Vite, pnpm | Same toolchain habits as WUAMYA |
-| Geometry | Parametric generators driven by a site data file (`bays`, widths, heights, roof type, terrace level) | Chinese timber halls are regular. One hall generator covers every building, and no 3D artist is needed |
-| Materials | CC0 PBR textures (Poly Haven, ambientCG) as KTX2; roof tiles and bracket sets as instanced geometry | Small download, sharp close-up |
-| Light | HDRI sky + one shadowed sun + ambient occlusion; ACES/AgX tone mapping, restrained bloom | Cheap enough for phones |
-| Realism layer | Licensed photos of the real place as hotspots at each hall; positional audio (bell, drum, chanting, wind) | The model alone will read as a good game level. Photos and sound are what make it feel like the real place |
-| Navigation | Walk mode (pointer-lock on desktop, twin-stick touch on phones), collision, plus a guided route of numbered stops | Stops double as fixed camera poses for screenshot checks |
-| UI | Plain DOM over the canvas; Vietnamese and English copy, hall names also in Chinese and pinyin | Accessible, translatable, easy to restyle |
+| Engine | three.js, one exact pinned version, `WebGLRenderer` | Widest device support; mature effects libraries; the atmosphere and cloud packages we want run on it |
+| Language and build | TypeScript (strict), Vite, pnpm | Same habits as WUAMYA |
+| Terrain | Sculpted height fields per place (noise plus hand-placed spires, terraces and paths), triplanar rock and moss | The reference look needs exaggerated height, not real elevation data |
+| Buildings | One parametric kit: platform, columns, bracket band, multi-tier sweeping roofs with instanced tiles, pagodas, covered bridges, walls, gates | Chinese timber buildings are regular; one kit dresses every place |
+| Atmosphere | Height fog, cloud-sea layer, aerial perspective by distance, light shafts, bloom, colour grade per place | This is what makes the reference images. It also hides distance, which keeps scenes cheap |
+| Small life | Instanced lanterns and lit windows, incense smoke, embers, leaves, banners | Cheap and carries the mood |
+| Characters | **Open decision**, see below | The hardest part without an artist |
+| Movement | Third-person camera, capsule controller, collision against scene meshes, lightness-skill leaps | Vertical scenery wants vertical movement |
+| Game layer | Chapter and scene manager, dialogue, simple objectives, hero switching, encounter system, browser save | Small, data-driven, testable without graphics |
+| Interface | DOM over the canvas; Vietnamese and English | Translatable, accessible, easy to restyle |
+| Sound | Positional ambience per place; music is an open question | Bells, wind, water, crowd |
 
-### What "as real as possible" means here
+### Why not an open world, or WebGPU only
 
-Be straight about the ceiling: this approach gives **spatially correct, atmospheric and convincing from walking distance**, not photoreal. Photoreal needs on-site capture, which we do not have:
+- The novel crosses a continent. Separate hand-directed scenes joined by a map are the only way a small team reaches "many places"; each new place is then a contained piece of work.
+- `fable5-world-demo` shows what WebGPU can do for misty mountains, and it is the closest reference to the look. It also excludes Safari, Firefox and phones, and still ran 12–40 fps on an M1 Max. We borrow its ideas for atmosphere and its working method, on the WebGL renderer. If the audience is confirmed as desktop Chrome only, revisit this.
 
-- No openly licensed 3D model, splat, photogrammetry set or 360° tour of Shaolin was found.
-- AI world generators (World Labs Marble and similar) invent whatever is not in their input, which conflicts with accuracy.
+## Characters: the decision that most needs you
 
-### Optional later upgrade: splat vignettes
+Three heroes and a supporting cast need bodies, costumes and animation (idle, walk, run, leap, strikes, talking). Options:
 
-For two or three hero spots (Pagoda Forest, Thousand Buddha Hall interior), generate a Gaussian-splat scene from 2–8 licensed photos with Marble, export about 500k splats, and render it with Spark inside the same scene. Label it as an AI reconstruction. This costs money (Marble Pro, reported $35/month) and its output licence terms were not confirmed. **Open decision**, Sprint 5 spike at the earliest.
-
-## Options considered
-
-| Option | Realism | Verdict |
-|---|---|---|
-| Procedural three.js (chosen) | Medium to good | No artist, few MB, phones work |
-| Gaussian splats of the real site | Highest | No capture data exists; revisit if someone films the temple |
-| AI-generated world | Looks rich | Not the real temple; use only for labelled vignettes |
-| 360° panoramas | Real imagery | No openly licensed Shaolin panoramas; keep as a weak-device fallback rendered from our own scene |
-| Photogrammetry from public photos | High if it works | Too few overlapping open photos; tourist video is copyrighted |
-| WebGPU-only (as in fable5-world-demo) | High | Excludes Safari, Firefox and all phones; that demo still runs 12–40 fps on an M1 Max |
-| Unity / Unreal pixel streaming | Highest | Needs an artist-built scene and a GPU server per viewer |
-
-## What we take from the reference projects
-
-| Project | What it is | We take | We leave |
+| Option | Look | Effort and cost | Risk |
 |---|---|---|---|
-| `sorrycc/fable-arcade` | One-prompt single-file games, low-poly | Brief shape ("must have" / "rules"); per-area instanced chunks; simple 2D box collision | One-shot method, no textures. No licence: ideas only |
-| `Braffolk/fable5-world-demo` (MIT) | Realistic procedural landscape, WebGPU | The working method: brief with reference images and banned outcomes, fixed camera bookmarks, screenshot-and-compare tools, pinned-version API notes; sky and time-of-day ideas | WebGPU-only, zero-asset rule, no buildings or collision |
-| `Nipale-ai/blocks-openworld` | City game with real asset pipeline | **Graybox first** behind factory functions with a written size contract, then swap in detail; shared trim textures; KTX2/Draco packing; automated gate that loads the build and fails on console errors or a near-black frame; "someone must look at the picture" | Needs a GPU workstation with Blender. No licence: ideas only |
+| **A. AI-generated models, auto-rigged** (Meshy, Tripo or Hunyuan3D from concept images, then Mixamo or the tool's own rigging) | Closest to the reference style; real robes and faces | Needs a paid account and someone to run the tool and download files; network access for the hosts | Quality varies per character; hands, faces and cloth need retries; check each tool's licence |
+| **B. Open-licensed base characters, re-dressed** (CC0 rigged humanoids with animation sets, recoloured and given robes, hats, beads in code) | Stylised, consistent, clearly "game" | Free; an agent can do all of it once the files are in the repo | Less distinctive; costumes are simple |
+| **C. Fully code-built figures** | Simple silhouettes | Free, no downloads | Reads as a prototype; fine for graybox only |
 
-Both larger projects record cases where numeric checks passed and the picture was visibly wrong. Looking at screenshots is therefore a required step, not an optional one.
+Recommendation: **C for Sprint 1** so nothing waits on assets, **B as the baseline**, and trial **A for the three heroes** in Sprint 2 if you are willing to run the tool. Keep the camera at mid distance and let robes, silhouette and colour identify each hero: Qiao Feng broad in dark travelling clothes, Duan Yu in pale scholar's robes, Xuzhu in grey monk's robes.
 
-## What we take from the helper repos
+## What we take from the reference projects (second look)
 
-None of the three has three.js or WebGPU engineering guidance. They help with the 2D interface, web hygiene and agent workflow. We copy named files; we install none of them.
-
-| Repo | Copy | Skip |
+| Project | Relevance now | We take |
 |---|---|---|
-| `GoogleChrome/modern-web-guidance` (Apache-2.0) | `skills/modern-web-guidance/` into `.claude/skills/`, with its `SKILL.md` rewritten to read the local `guides/` | Its default `npx …@latest` lookup: unpinned code plus telemetry to Google on every UI task |
-| `nexu-io/open-design` (Apache-2.0) | `craft/` rulebooks (accessibility baseline, state coverage, animation, typography, colour, anti-slop) into `docs/design/craft/`; `design-systems/kami/` as the seed for our `DESIGN.md` and tokens (parchment and ink, built for Latin + CJK type) | The app, daemon and MCP (364 MB, telemetry); brand-imitating design systems; its `threejs` skill, which is an empty stub |
-| `affaan-m/ECC` (MIT) | Ideas already adopted in WUAMYA (model routing, verification loop, minimal-diff fixes, reviewer checklists); optionally `rules/typescript/*` and `rules/web/performance.md`, edited | The plugin and its 28 hooks that run scripts on every tool call; the 300-skill catalogue; its MCP config. Same decision as WUAMYA |
+| `Braffolk/fable5-world-demo` (MIT) | High for the look: mountains, fog, clouds, time-of-day grading | Atmosphere and colour-script ideas; working method: reference images, banned outcomes, fixed camera stops, screenshot-and-compare tools, pinned-version API notes |
+| `Nipale-ai/blocks-openworld` | High for game structure: third-person play, collision, encounters | Graybox first behind factory functions; spatial-hash collision; automated visual gate; "someone must look at the picture". No licence: ideas only |
+| `sorrycc/fable-arcade` | Medium: complete small games from one brief | Brief shape; synthesised sound effects; instanced chunks. No licence: ideas only |
+
+None of the three has rigged, animated human characters of the kind we need, dialogue, or phone controls. Those are ours to build.
+
+## Helper repos
+
+Unchanged from the first review: copy named files, install nothing.
+
+- `GoogleChrome/modern-web-guidance`: the skill, rewritten to read its guides locally (its default mode runs unpinned code and reports queries to Google).
+- `nexu-io/open-design`: the `craft/` rulebooks and the `kami` design system as the seed for the interface (parchment and ink, built for Latin and Chinese type; a good fit for a wuxia game).
+- `affaan-m/ECC`: ideas only; no plugin, no hooks.
 
 ## Environment findings
 
-- This cloud environment can render and screenshot WebGL2, and WebGPU with flags, through a software renderer. Agents can check their own visuals. Frame rates measured here say nothing about real devices.
-- Only the npm registry is reachable. `polyhaven.com`, `ambientcg.com`, `commons.wikimedia.org`, `upload.wikimedia.org`, `whc.unesco.org`, `overpass-api.de` and Wikipedia are blocked. Sprint 1 needs these allowed, or the files added to the repo by hand.
-- No Blender and no GPU here, so geometry is generated in code at run time or by Node scripts, not by a Blender pipeline.
+- This cloud environment can render and screenshot WebGL through a software renderer, so agents can check their own pictures. Frame rate must be tested on real devices.
+- Only the npm registry is reachable. Texture, model and audio hosts are blocked. Either allow the hosts needed (decided once the character option is chosen) or add files to the repo by hand.
+- No Blender and no GPU here: geometry is generated in code.
 
 ## Risks
 
 | Risk | Mitigation |
 |---|---|
-| Looks like a game, not the temple | Reference-delta loop against real photos for every hall; real photo hotspots; weathering and roof detail budgeted in Sprint 2 before scaling out |
-| Wrong layout or proportions | `docs/site-brief.md` records every dimension with its source and flags conflicts; settle them from the UNESCO nomination plans |
-| Photo and audio licences | Licence ledger (`docs/licences.md`): file, author, licence, URL, where used. Nothing ships without a row |
-| Phones too slow | Instancing, per-courtyard culling, quality tiers; test on two real phones each sprint |
-| Sacred site, real institution | Respectful tone; no monks' likenesses; clearly unofficial; factual captions with sources |
+| Characters look poor next to the scenery | Decide the character option early; mid-distance camera; trial one hero before committing |
+| Scope: "all places in the story" | One complete place first; each further place is one sprint; the spine list in `docs/game-design.md` is the order |
+| Looks flat and generic | Atmosphere built in Sprint 1, not last; `visual-critic` compares every arrival vista with the mood references |
+| Copyright | Friends-only unless permission is obtained; original wording; no assets from the series or existing games |
+| Slow on ordinary laptops and phones | Fog-limited view distance, instancing, quality tiers, budgets in the gate |
 
 ## Open decisions
 
-1. Accept the realism ceiling above, or arrange on-site capture (a friend filming the route would unlock splats)?
-2. Languages: Vietnamese + English proposed.
-3. Hosting: GitHub Pages / Cloudflare Pages (static, free) or the ERPtek VPS.
-4. Allow the asset and reference hosts in the cloud environment.
-5. Budget for splat vignettes (Marble), yes or no.
+1. Character option (A, B or C path above), and who runs an AI tool if A.
+2. Friends-only or public.
+3. Desktop only, or phones too.
+4. Hosting: free static host or the ERPtek VPS.
+5. Music: none, licensed tracks, or AI-generated.
+6. Create the Jira epics and Sprint 1 tickets.

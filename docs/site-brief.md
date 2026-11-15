@@ -1,6 +1,6 @@
 # Site brief: the real Shaolin Temple
 
-The source of truth for what we model. Every number carries a source. `[conflict]` means sources disagree, `[unverified]` means one weak source or recall only. Resolve these from the UNESCO nomination file (1305rev) and maps before the number goes into `site data`.
+**Inspiration only** since the project became a game (see `docs/game-design.md`): the game's Shaolin follows this central axis loosely and takes liberties with terrain and scale. Every number carries a source. `[conflict]` means sources disagree, `[unverified]` means one weak source or recall only. Resolve these from the UNESCO nomination file (1305rev) and maps before the number goes into `site data`.
 
 Gathered 15 Nov 2026 from web search summaries; most source sites could not be opened directly from the build environment.
 

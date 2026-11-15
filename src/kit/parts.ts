@@ -157,6 +157,8 @@ export class KitParts {
   finish(name: string): PartsResult {
     const textures = acquireTextures();
     const geometries: BufferGeometry[] = [];
+    const instances: InstancedMesh[] = [];
+    let disposed = false;
     const materials: Material[] = [];
     const group = new Group();
     group.name = name;
@@ -172,6 +174,7 @@ export class KitParts {
       mesh.castShadow = cast;
       mesh.receiveShadow = true;
       geometries.push(mesh.geometry);
+      if (mesh instanceof InstancedMesh) instances.push(mesh);
       group.add(mesh);
     };
     const merged = (b: MeshBuilder, mat: Material, label: string, cast: boolean): void => {
@@ -201,6 +204,9 @@ export class KitParts {
       object: group,
       stats,
       dispose() {
+        if (disposed) return;
+        disposed = true;
+        for (const i of instances) i.dispose();
         for (const g of geometries) g.dispose();
         for (const m of materials) m.dispose();
         releaseTextures();

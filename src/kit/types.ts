@@ -11,7 +11,12 @@ export interface Building {
   height: number;
   /** Axis-aligned collision boxes in the building's local frame. Doors and passages are left open. */
   solids: Solid[];
-  /** Walkable height of the platform and its steps at a local point; 0 outside the platform. */
+  /**
+   * Walkable height of the platform and its steps at a local point; 0 outside the platform. Flat per
+   * tread. A place combines it with `solids`: stand on `heightAt`, and let `solids` block movement.
+   * `solids` include thin boxes along the platform sides, the parapet runs (open at the stairs) and
+   * the stair cheek walls, so the hero cannot be lifted up a side from the ground to the rim.
+   */
   heightAt(x: number, z: number): number;
   /** Cost of the building as built: triangles, meshes, and draw calls per frame (main pass plus shadow pass). */
   stats: BuildingStats;

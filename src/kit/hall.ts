@@ -113,10 +113,7 @@ export function createHall(params: HallParams = {}): Building {
   };
 
   const parts = new KitParts(palette, rng);
-  addPlatform(parts, platform);
-  addBalustrade(parts, platform);
-
-  const solids: Solid[] = [];
+  const solids: Solid[] = [...addPlatform(parts, platform), ...addBalustrade(parts, platform)];
   const thick = 0.42;
   const gapNominal = 0.95;
   const wallThick = 0.4;

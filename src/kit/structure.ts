@@ -54,16 +54,22 @@ export function platformHeightAt(spec: PlatformSpec, x: number, z: number): numb
   if (Math.abs(x) <= hx && Math.abs(z) <= hz) return height;
   if (Math.abs(x) > stairs.width / 2) return 0;
   const n = stairCount(height);
-  const run = n * STEP_RUN;
+  const rise = height / n;
   for (const side of stairs.sides) {
     const out = side === 'front' ? -z - hz : z - hz; // distance beyond the platform edge
-    if (out > 0 && out < run) return height * (1 - out / run);
+    if (out > 0 && out < n * STEP_RUN) {
+      // Flat per tread, matching the boxes drawn in addPlatform: tread k covers ((k-1), k] runs.
+      return Math.max(0, height - Math.ceil(out / STEP_RUN) * rise);
+    }
   }
   return 0;
 }
 
-/** Two-layer stone platform with steps and sloping stair cheeks. Returns nothing: it draws into `parts.body`. */
-export function addPlatform(parts: KitParts, spec: PlatformSpec): void {
+/**
+ * Two-layer stone platform with steps and stair cheeks, drawn into `parts.body`. Returns thin solids
+ * for the platform sides and the stair cheek walls; the treads themselves are walked via `platformHeightAt`.
+ */
+export function addPlatform(parts: KitParts, spec: PlatformSpec): Solid[] {
   const { hx, hz, height, stairs } = spec;
   const stone = rgb(parts.palette.stone);
   const b = parts.body;
@@ -73,6 +79,36 @@ export function addPlatform(parts: KitParts, spec: PlatformSpec): void {
   const n = stairCount(height);
   const rise = height / n;
   const sw = stairs.width;
+  const solids: Solid[] = [];
+  const edge = 0.3;
+  const cheekW = 0.5;
+  // Platform sides, so the hero is blocked at the rim instead of being snapped up it.
+  for (const side of ['front', 'back'] as const) {
+    const sgn = side === 'front' ? -1 : 1;
+    const zA = Math.min(sgn * hz, sgn * (hz + edge));
+    const zB = Math.max(sgn * hz, sgn * (hz + edge));
+    const segs: [number, number][] = stairs.sides.includes(side)
+      ? [[-hx - edge, -(sw / 2 + cheekW)], [sw / 2 + cheekW, hx + edge]]
+      : [[-hx - edge, hx + edge]];
+    for (const [a0, a1] of segs) solids.push({ min: [a0, 0, zA], max: [a1, height, zB] });
+  }
+  for (const xs of [-1, 1] as const) {
+    solids.push({ min: [Math.min(xs * hx, xs * (hx + edge)), 0, -hz], max: [Math.max(xs * hx, xs * (hx + edge)), height, hz] });
+  }
+  for (const side of stairs.sides) {
+    const sgn = side === 'front' ? -1 : 1;
+    // Cheek walls as stepped boxes that follow their slope from above.
+    for (const xs of [-1, 1] as const) {
+      for (let k = 0; k < n; k++) {
+        const za = sgn * (hz + k * STEP_RUN);
+        const zb = sgn * (hz + (k + 1) * STEP_RUN);
+        solids.push({
+          min: [Math.min(xs * sw / 2, xs * (sw / 2 + cheekW)), 0, Math.min(za, zb)],
+          max: [Math.max(xs * sw / 2, xs * (sw / 2 + cheekW)), height - k * rise, Math.max(za, zb)],
+        });
+      }
+    }
+  }
   for (const side of stairs.sides) {
     const sgn = side === 'front' ? -1 : 1;
     // Treads: step k is the k-th below the top.
@@ -97,10 +133,11 @@ export function addPlatform(parts: KitParts, spec: PlatformSpec): void {
       b.triAway([xi, 0, zTop], [xi, height, zTop], [xi, 0, zLow], shade(cheek, 0.94), [xo, 0, sgn * (hz + run * 0.3)]);
     }
   }
+  return solids;
 }
 
 /** Stone parapet with instanced baluster posts around a platform rim, skipping the stair openings. */
-export function addBalustrade(parts: KitParts, spec: PlatformSpec): void {
+export function addBalustrade(parts: KitParts, spec: PlatformSpec): Solid[] {
   const { hx, hz, height, stairs } = spec;
   const inset = 0.32;
   const rx = hx - inset;
@@ -108,6 +145,7 @@ export function addBalustrade(parts: KitParts, spec: PlatformSpec): void {
   const stone = rgb(parts.palette.stone);
   const b = parts.body;
   const gapHalf = stairs.width / 2 + 0.2;
+  const solids: Solid[] = [];
   const run = (side: Side, a0: number, a1: number): void => {
     if (a1 - a0 < 0.4) return;
     const axisX = side === 'front' || side === 'back';
@@ -116,6 +154,11 @@ export function addBalustrade(parts: KitParts, spec: PlatformSpec): void {
       if (axisX) b.box([a0, height + y0, c - w], [a1, height + y1, c + w], color);
       else b.box([c - w, height + y0, a0], [c + w, height + y1, a1], color);
     };
+    solids.push(
+      axisX
+        ? { min: [a0, height, c - 0.16], max: [a1, height + 1, c + 0.16] }
+        : { min: [c - 0.16, height, a0], max: [c + 0.16, height + 1, a1] },
+    );
     rail(0, 0.18, 0.16, shade(stone, 0.9));
     rail(0.18, 0.9, 0.06, shade(stone, 0.96));
     rail(0.9, 1.0, 0.11, shade(stone, 1.05));
@@ -135,6 +178,7 @@ export function addBalustrade(parts: KitParts, spec: PlatformSpec): void {
   }
   run('left', -rz, rz);
   run('right', -rz, rz);
+  return solids;
 }
 
 export interface DoorSpec {

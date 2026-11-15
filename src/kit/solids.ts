@@ -2,10 +2,15 @@ import type { Solid, Vec3 } from '../places/types';
 
 /**
  * Moves solids from a building's local frame into the world: turn by `yaw` about the vertical
- * axis (three.js `rotation.y`, radians), then translate. The result is the axis-aligned box that
- * encloses each turned box, so a quarter turn stays exact.
+ * axis (three.js `rotation.y`, radians), then translate. Only multiples of a quarter turn are
+ * supported: an axis-aligned box stays exact then. Any other yaw would need enclosing boxes that
+ * block open ground, so it throws.
  */
 export function placeSolids(solids: readonly Solid[], position: Vec3, yaw = 0): Solid[] {
+  const quarters = yaw / (Math.PI / 2);
+  if (!Number.isFinite(quarters) || Math.abs(quarters - Math.round(quarters)) > 1e-6) {
+    throw new Error(`placeSolids needs a yaw that is a multiple of PI/2, got ${yaw}`);
+  }
   const c = Math.cos(yaw);
   const s = Math.sin(yaw);
   return solids.map((box) => {

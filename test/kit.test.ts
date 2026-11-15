@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
-import { Mesh, Scene, type BufferGeometry } from 'three';
-import { afterEach, describe, expect, it } from 'vitest';
+import { BufferGeometry, InstancedMesh, Material, Mesh, Scene } from 'three';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createRng } from '../src/engine/rng';
 import {
   createGate,
@@ -116,12 +116,12 @@ describe('hall factory', () => {
       expect(hall.footprint.depth).toBeCloseTo(D + 2 * 1.7, 6);
       expect(hall.height).toBeGreaterThan(c.eaves === 2 ? 15 : 7);
       expect(hall.height).toBeLessThan(40);
-      // Every solid sits on the platform and inside the footprint.
+      // Wall and column solids stand on the platform; platform-side solids reach 0.3 m past its edge.
       for (const s of hall.solids) {
-        expect(s.min[1]).toBeGreaterThanOrEqual(1.1 - 1e-6);
-        expect(Math.abs(s.min[0])).toBeLessThanOrEqual(hall.footprint.width / 2);
-        expect(Math.abs(s.max[2])).toBeLessThanOrEqual(hall.footprint.depth / 2);
+        expect(Math.abs(s.min[0])).toBeLessThanOrEqual(hall.footprint.width / 2 + 0.3 + 1e-6);
+        expect(Math.abs(s.max[2])).toBeLessThanOrEqual(hall.footprint.depth / 2 + 3.5);
         expect(s.max[1]).toBeGreaterThan(s.min[1]);
+        if (s.min[1] > 0) expect(s.min[1]).toBeGreaterThanOrEqual(1.1 - 1e-6);
       }
     });
   }
@@ -309,11 +309,118 @@ describe('solids and platform helpers', () => {
     expect(back[1]).toBeCloseTo(1, 9);
   });
 
-  it('gives a platform ramp that reaches the ground', () => {
+  it('steps flat per tread, never more than one rise at a time', () => {
     const spec = { hx: 5, hz: 4, height: 1, stairs: { sides: ['front'] as const, width: 3 } };
-    expect(platformHeightAt({ ...spec, stairs: { ...spec.stairs, sides: ['front'] } }, 0, 0)).toBe(1);
-    expect(platformHeightAt({ ...spec, stairs: { ...spec.stairs, sides: ['front'] } }, 0, -4.01)).toBeGreaterThan(0.9);
-    expect(platformHeightAt({ ...spec, stairs: { ...spec.stairs, sides: ['front'] } }, 4, -4.5)).toBe(0);
+    const n = 5;
+    const rise = 1 / n;
+    const run = 0.42;
+    expect(platformHeightAt(spec, 0, 0)).toBe(1);
+    for (let k = 1; k < n; k++) {
+      expect(platformHeightAt(spec, 0, -(4 + (k - 0.5) * run))).toBeCloseTo(1 - k * rise, 9);
+    }
+    expect(platformHeightAt(spec, 0, -(4 + n * run + 0.1))).toBe(0);
+    expect(platformHeightAt(spec, 4, -4.5)).toBe(0);
+    let prev = 1;
+    for (let out = 0.001; out < n * run + 0.2; out += 0.01) {
+      const h = platformHeightAt(spec, 0, -(4 + out));
+      expect(prev - h).toBeLessThanOrEqual(rise + 1e-9);
+      expect(h).toBeLessThanOrEqual(prev + 1e-9);
+      prev = h;
+    }
+  });
+
+  it('refuses yaws that are not quarter turns', () => {
+    const box: Solid = { min: [-1, 0, -1], max: [1, 1, 1] };
+    expect(() => placeSolids([box], [0, 0, 0], Math.PI / 4)).toThrow(/multiple of PI\/2/);
+    expect(() => placeSolids([box], [0, 0, 0], Number.NaN)).toThrow();
+    expect(() => placeSolids([box], [0, 0, 0], Math.PI)).not.toThrow();
+    expect(() => placeSolids([box], [0, 0, 0], -3 * Math.PI / 2)).not.toThrow();
+  });
+});
+
+describe('collision boxes', () => {
+  it('has the specific boxes a place relies on', () => {
+    const hall = keep(createHall({ widthBays: 5, depthBays: 3 }));
+    const ph = 1.1;
+    const hz = 6 + 1.7;
+    // Front wall, left of the door.
+    expect(hall.solids.some((s) => inside(s, [-5, ph + 1, -6 + 0.2]))).toBe(true);
+    // Platform side: blocks a point on the front rim face, at ground height, away from the stairs.
+    expect(hall.solids.some((s) => inside(s, [-8, 0.5, -hz - 0.15]))).toBe(true);
+    // The stairs stay open at ground and tread level.
+    expect(hall.solids.some((s) => inside(s, [0, 0.4, -hz - 1.2]))).toBe(false);
+    // Rim parapet beside the stairs, with the gap at the stairs open.
+    expect(hall.solids.some((s) => inside(s, [-8, ph + 0.5, -hz + 0.32]))).toBe(true);
+    expect(hall.solids.some((s) => inside(s, [0, ph + 0.5, -hz + 0.32]))).toBe(false);
+    // Stair cheek wall, at the top and lower down.
+    expect(hall.solids.some((s) => inside(s, [2.4, ph - 0.1, -hz - 0.2]))).toBe(true);
+    expect(hall.solids.some((s) => inside(s, [2.4, 0.1, -hz - 1.5]))).toBe(true);
+    expect(hall.solids.some((s) => inside(s, [2.4, ph - 0.1, -hz - 1.5]))).toBe(false);
+  });
+
+  it('gives the ground-tier pagoda corner posts a box each', () => {
+    const p = keep(createPagoda({ tiers: 3 }));
+    const w = 4.5;
+    for (const [x, z] of [[-w, -w], [w, -w], [w, w], [-w, w]] as const) {
+      expect(p.solids.some((s) => inside(s, [x, 1.3 + 1, z]))).toBe(true);
+    }
+  });
+
+  it('only blocks where a wall post is drawn', () => {
+    const open = keep(createWall({ points: [[0, 0], [10, 0]], endPosts: false }));
+    const closed = keep(createWall({ points: [[0, 0], [10, 0]], endPosts: true }));
+    expect(closed.solids.length).toBe(open.solids.length + 2);
+  });
+
+  it('keeps a 45 degree wall close to its real width', () => {
+    const w = keep(createWall({ points: [[0, 0], [20, 20]], thickness: 0.9 }));
+    // 1.5 m off the centre line is open ground; the diagonal's enclosing box would have blocked it.
+    expect(w.solids.some((s) => inside(s, [10 + 1.0, 1, 10 - 1.0]))).toBe(false);
+    expect(w.solids.some((s) => inside(s, [10, 1, 10]))).toBe(true);
+  });
+});
+
+describe('disposal', () => {
+  it('disposes every geometry, material and instanced mesh once, and survives a second call', () => {
+    const geos = vi.spyOn(BufferGeometry.prototype, 'dispose');
+    const mats = vi.spyOn(Material.prototype, 'dispose');
+    const insts = vi.spyOn(InstancedMesh.prototype, 'dispose');
+    const hall = createHall({ widthBays: 3, depthBays: 2, eaves: 2 });
+    const geoList = new Set<BufferGeometry>();
+    const matList = new Set<Material>();
+    const instList: InstancedMesh[] = [];
+    hall.object.traverse((o) => {
+      if (!(o instanceof Mesh)) return;
+      geoList.add(o.geometry as BufferGeometry);
+      matList.add(o.material as Material);
+      if (o instanceof InstancedMesh) instList.push(o);
+    });
+    expect(instList.length).toBeGreaterThan(3);
+    geos.mockClear();
+    mats.mockClear();
+    insts.mockClear();
+    hall.dispose();
+    for (const g of geoList) expect(geos.mock.calls.filter((_, i) => geos.mock.contexts[i] === g).length).toBe(1);
+    for (const m of matList) expect(mats.mock.calls.filter((_, i) => mats.mock.contexts[i] === m).length).toBe(1);
+    for (const i of instList) expect(insts.mock.contexts.filter((c) => c === i).length).toBe(1);
+    const before = [geos.mock.calls.length, mats.mock.calls.length, insts.mock.calls.length];
+    hall.dispose();
+    expect([geos.mock.calls.length, mats.mock.calls.length, insts.mock.calls.length]).toEqual(before);
+  });
+
+  it('does not free shared textures while another building still uses them', () => {
+    const a = createHall({ widthBays: 3, depthBays: 2 });
+    const b = createHall({ widthBays: 3, depthBays: 2 });
+    let map: { dispose: () => void } | undefined;
+    b.object.traverse((o) => {
+      if (o.name === 'roof-surface') map = ((o as Mesh).material as unknown as { map: { dispose: () => void } }).map;
+    });
+    const spy = vi.spyOn(map as { dispose: () => void }, 'dispose');
+    a.dispose();
+    a.dispose();
+    expect(spy).not.toHaveBeenCalled();
+    b.dispose();
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 });
 

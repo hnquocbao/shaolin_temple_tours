@@ -29,7 +29,7 @@ export interface WallParams {
  *   are used as given, so the origin is whatever the caller chose; +y up, metres.
  * - `footprint` is the bounding box of the run, thickness included. `height` is the top of the coping.
  * - `solids` are axis-aligned boxes covering the run from the ground to the wall top (diagonal runs
- *   are cut into short chunks). `heightAt` is 0 everywhere.
+ *   are cut into 0.5 m chunks, so the over-block stays small). `heightAt` is 0 everywhere.
  * - Each polyline vertex gets a square post, so corners and ends are closed. About 3k triangles per
  *   10 m of wall.
  */
@@ -209,7 +209,7 @@ export function createWall(params: WallParams): Building {
 
     // Collision: one box for an axis-aligned run, short chunks for a diagonal one.
     const aligned = Math.abs(dx) < 1e-6 || Math.abs(dz) < 1e-6;
-    const chunks = aligned ? 1 : Math.ceil(len / 2);
+    const chunks = aligned ? 1 : Math.ceil(len / 0.5);
     const hh = t / 2 + 0.1;
     for (let c = 0; c < chunks; c++) {
       const ua = u0 - 0.22 + ((u1 - u0 + 0.44) * c) / chunks;
@@ -224,13 +224,11 @@ export function createWall(params: WallParams): Building {
 
   const endPosts = params.endPosts ?? true;
   pts.forEach((p, i) => {
-    if (i === 0 || i === pts.length - 1) {
-      if (endPosts) post(p[0], p[1]);
-    } else post(p[0], p[1]);
-  });
-  for (const p of pts) {
+    const isEnd = i === 0 || i === pts.length - 1;
+    if (isEnd && !endPosts) return;
+    post(p[0], p[1]);
     solids.push({ min: [p[0] - t / 2 - 0.22, 0, p[1] - t / 2 - 0.22], max: [p[0] + t / 2 + 0.22, height + 0.5, p[1] + t / 2 + 0.22] });
-  }
+  });
 
   const built = parts.finish('wall');
   return {

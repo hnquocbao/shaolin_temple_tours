@@ -57,10 +57,7 @@ export function createPagoda(params: PagodaParams = {}): Building {
     stairs: { sides: ['front'], width: 3.4 },
   };
   const parts = new KitParts(palette, rng);
-  addPlatform(parts, platform);
-  addBalustrade(parts, platform);
-
-  const solids: Solid[] = [];
+  const solids: Solid[] = [...addPlatform(parts, platform), ...addBalustrade(parts, platform)];
   let y = ph;
   let maxY = ph;
 
@@ -104,7 +101,8 @@ export function createPagoda(params: PagodaParams = {}): Building {
         { shape, centre: [0, 0], baseY, palette, rng, thick, finial: 1.7, ornament: 0.85 },
         { surface: parts.surface, body: parts.body, tiles: parts.tiles },
       );
-      addColumnRing(parts, stops, stops, y, bodyH, roof.underY, 0.8, i === 0);
+      const posts = addColumnRing(parts, stops, stops, y, bodyH, roof.underY, 0.8, i === 0);
+      if (i === 0) solids.push(...posts);
       addFrieze(parts, w, w, top, roof.underY, 0.35);
       maxY = Math.max(maxY, roof.maxY);
     } else {
@@ -127,7 +125,8 @@ export function createPagoda(params: PagodaParams = {}): Building {
         { shape, centre: [0, 0], baseY, palette, rng, thick, ornament: 0.8 },
         { surface: parts.surface, body: parts.body, tiles: parts.tiles },
       );
-      addColumnRing(parts, stops, stops, y, bodyH, roof.underY, 0.8, i === 0);
+      const posts = addColumnRing(parts, stops, stops, y, bodyH, roof.underY, 0.8, i === 0);
+      if (i === 0) solids.push(...posts);
       addFrieze(parts, w, w, top, roof.underY, 0.35);
       maxY = Math.max(maxY, roof.maxY);
       y = baseY + rise; // the next tier starts where this skirt meets its wall

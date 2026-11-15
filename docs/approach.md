@@ -71,11 +71,21 @@ Unchanged from the first review: copy named files, install nothing.
 | Copyright | Friends-only unless permission is obtained; original wording; no assets from the series or existing games |
 | Slow on ordinary laptops and phones | Fog-limited view distance, instancing, quality tiers, budgets in the gate |
 
-## Open decisions
+## Decisions (15 Nov 2026)
 
-1. Character option (A, B or C path above), and who runs an AI tool if A.
-2. Friends-only or public.
-3. Desktop only, or phones too.
-4. Hosting: free static host or the ERPtek VPS.
-5. Music: none, licensed tracks, or AI-generated.
-6. Create the Jira epics and Sprint 1 tickets.
+| Question | Decision |
+|---|---|
+| Characters | Code-built placeholders in Sprint 1; open-licensed rigged characters re-dressed as the baseline; AI-generated models trialled for the three heroes (the owner runs the tool) |
+| Audience | Friends only, by private link. No public release |
+| Devices | Desktop now (keyboard and mouse, 1920×1080 target). Phones later, if at all |
+| Fighting | Light encounters built on signature moves |
+| Hosting | The ERPtek VPS, as WUAMYA: nginx on the host, deploy by a GitHub Actions job over a restricted SSH key |
+| Jira | Epics ST3T-1 to ST3T-8 and the Sprint 1 tickets created |
+
+Desktop-only raises the visual budget (heavier atmosphere, more instances, larger textures). We still start on `WebGLRenderer`: the friends' browsers are not known to be Chrome, and the effects libraries we plan to use target it. Revisit after Sprint 1 if the look needs more than it can give.
+
+## Still open
+
+1. Music: none, licensed tracks, or AI-generated.
+2. Which AI model tool for the hero trial, and its host allowed in the cloud environment (or files added by hand).
+3. Subdomain for the private preview.

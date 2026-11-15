@@ -11,6 +11,7 @@ A browser role-playing game for friends who love Jin Yong: play Qiao Feng, Duan 
 - **Look at the picture:** any change to what is on screen is screenshot-checked and compared with the mood references. Passing checks do not replace looking.
 - **Rights:** this is a fan project. Write all dialogue and narration in our own words; never copy text from the novel or its translations; never use art, music, interface or character designs from the TV series or existing games. `docs/site-brief.md` (the real temple) is inspiration only.
 - **Licences:** every model, texture, sound, font and image needs a row in `docs/licences.md` before it is committed, including AI-generated ones (tool and terms).
+- Friends only, never public. Desktop first: keyboard and mouse, 1920×1080.
 - Copy is Vietnamese and English; names of heroes and places also in Chinese.
 - Checks: `pnpm gate`.
 - Jira project ST3T on `erptek.atlassian.net`. Commits start with the issue key (`ST3T-12: …`).

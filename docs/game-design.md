@@ -71,10 +71,6 @@ Must not look like: flat ground with buildings on it; even noon lighting with no
 - Do not use art, music, footage or names of features from the TV series or the existing games.
 - All assets need a licence row in `docs/licences.md`. AI-generated assets record the tool and its terms.
 
-## Open decisions
+## Decided (15 Nov 2026)
 
-1. **Characters:** how the three heroes are made (see `docs/approach.md`).
-2. **Audience:** friends only by private link, or public?
-3. **Devices:** desktop only, or phones too?
-4. **Languages:** Vietnamese first with English, hero names in Chinese on first mention?
-5. **Fighting:** light encounters as proposed, or more of a combat game?
+Friends only by private link; desktop first; light encounters as described; characters by the path in `docs/approach.md`. Languages are Vietnamese first with English, names also in Chinese (assumed; say if not).

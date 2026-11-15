@@ -1,6 +1,6 @@
 # Sprint plan
 
-Jira project **ST3T** (board 136), two-week sprints. Proposed backlog for the role-playing game described in `docs/game-design.md`. Jira is created from this once the direction is agreed.
+Jira project **ST3T** (board 136), two-week sprints. Backlog for the role-playing game described in `docs/game-design.md`. Epics are ST3T-1 (E1) to ST3T-8 (E8).
 
 ## Epics
 
@@ -22,7 +22,7 @@ Jira project **ST3T** (board 136), two-week sprints. Proposed backlog for the ro
 | # | Type | Story | Epic |
 |---|---|---|---|
 | 1 | Task | Scaffold: Vite + TypeScript strict + three.js pinned, pnpm, lint, CI running `pnpm gate` | E1 |
-| 2 | Task | Screenshot harness: camera stops as data, `?place=`, `?stop=`, `?freeze=`; `pnpm shoot` with console-error and blank-frame checks | E1 |
+| 2 | Task | Screenshot harness: camera stops as data, `?place=`, `?stop=`, `?freeze=`; `pnpm shoot` at 1920×1080 with console-error and blank-frame checks | E1 |
 | 3 | Story | Mount Shaoshi terrain: sculpted ridges, terraces for the temple, spires, a climbing path | E2 |
 | 4 | Story | Atmosphere: cloud sea in the valleys, layered haze, low warm sun, light shafts, bloom, golden-hour grade | E2 |
 | 5 | Story | Building kit v1: hall on a platform with a sweeping tiled roof, pagoda, wall, gate, in graybox-plus-roof quality | E3 |
@@ -30,7 +30,7 @@ Jira project **ST3T** (board 136), two-week sprints. Proposed backlog for the ro
 | 7 | Story | Third-person movement: run, jump, lightness-skill leap, camera, collision; keyboard and mouse | E5 |
 | 8 | Story | Arrival vista: scripted flight over the place, then hand control to the player | E2 |
 | 9 | Task | Placeholder hero figure with idle, run and leap (code-built) | E4 |
-| 10 | Task | Private preview deployment on every push | E1 |
+| 10 | Task | Private preview on the ERPtek VPS, deployed on every push | E1 |
 | 11 | Spike | Character trial: one hero made by the chosen option, in the scene, with a verdict | E4 |
 
 ## Sprint 2 — Three heroes (30 Nov – 11 Dec)

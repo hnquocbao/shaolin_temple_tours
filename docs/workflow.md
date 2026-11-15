@@ -16,7 +16,7 @@ Agent definitions live in `.claude/agents/` and load when a Claude Code session 
 | **Checker** | Haiku | `checker` | Runs the gates, returns a PASS/FAIL table | Fixing anything |
 | **Jira clerk** | Haiku | `jira-clerk` | Applies decided Jira updates in project ST3T | Deciding status or scope |
 
-Dropped from WUAMYA: the ops session (the site is static). `translator` is not set up yet; add it in Sprint 3 when the story text arrives. A Vietnamese speaker approves tone before merge.
+Dropped from WUAMYA: the ops session (the site is static; host changes on the VPS are one-time steps for the owner, listed in `docs/deploy.md`). `translator` is not set up yet; add it in Sprint 3 when the story text arrives. A Vietnamese speaker approves tone before merge.
 
 **Escalate** when a brief fails twice with Sonnet, or touches roof geometry, the character controller or the renderer setup: the controller writes the core change itself.
 

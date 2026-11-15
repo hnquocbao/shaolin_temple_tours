@@ -37,29 +37,33 @@ function leap(w: World, from: HeroState, yaw: number, past: (s: HeroState) => bo
   return trail[trail.length - 1]!;
 }
 
-describe('Shaolin placeholder in play mode', () => {
+describe('Shaolin in play mode', () => {
   const w = worldOf(shaolin);
 
-  it('spawns on the ground below the first terrace, which is a cliff to walk into', () => {
+  it('spawns on the stair path, standing on the ground', () => {
     const start = spawnState(w);
-    expect(start.y).toBe(0);
-    const trail = run(w, start, () => ({ ...NO_INPUT, moveZ: 1, sprint: true }), 6);
-    const end = trail[trail.length - 1]!;
-    expect(end.y).toBe(0);
-    expect(end.z).toBeLessThan(-21);
+    expect(start.y).toBeCloseTo(w.heightAt(start.x, start.z), 5);
+    expect(Math.abs(start.x)).toBeLessThan(2.5);
   });
 
-  it('leaps up onto the first terrace, then onto a hall roof', () => {
-    const onTerrace = leap(w, spawnState(w), 0, (s) => s.z > -30);
-    expect(onTerrace.grounded).toBe(true);
-    expect(onTerrace.y).toBeCloseTo(3, 5);
-    expect(onTerrace.respawns).toBe(0);
-    // Back up for a run-up on the terrace, then leap at the hall (roof at 10 m).
-    const roof = leap(w, { ...onTerrace, z: -21, vx: 0, vz: 0 }, 0, (s) => s.z > -18, (s) => s.z > -8);
-    expect(roof.grounded).toBe(true);
-    expect(roof.y).toBeCloseTo(10, 5);
-    expect(Math.abs(roof.z)).toBeLessThan(7);
-    expect(roof.respawns).toBe(0);
+  it('can be run up the stone stair onto the first terrace without leaving the ground for long', () => {
+    const start = spawnState(w);
+    const trail = run(w, start, () => ({ ...NO_INPUT, moveZ: 1, sprint: true }), 8);
+    const end = trail[trail.length - 1]!;
+    expect(end.respawns).toBe(0);
+    expect(end.z).toBeGreaterThan(start.z + 30);
+    expect(end.y).toBeGreaterThan(start.y + 1);
+    // Feet stay on the ground: never more than a tread's hop above it.
+    for (const s of trail) expect(s.y - w.heightAt(s.x, s.z)).toBeLessThan(0.6);
+  });
+
+  it('cannot walk off the terrace edge into the valley and survive unnoticed', () => {
+    // Run east off the first terrace: the hero must fall and be brought back, never end below the kill height.
+    const start: HeroState = { ...spawnState(w), x: 0, z: 0, y: w.heightAt(0, 0) };
+    const trail = run(w, start, () => ({ ...NO_INPUT, moveZ: 1, sprint: true, cameraYaw: Math.PI / 2 }), 30);
+    const end = trail[trail.length - 1]!;
+    expect(Number.isFinite(end.y)).toBe(true);
+    expect(end.y).toBeGreaterThan(-45);
   });
 });
 

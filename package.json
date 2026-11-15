@@ -15,6 +15,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "shoot": "node tools/shoot.mjs",
+    "play-check": "node tools/play-check.mjs",
     "gate": "node tools/gate.mjs"
   },
   "dependencies": {

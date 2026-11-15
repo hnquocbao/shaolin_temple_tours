@@ -8,6 +8,7 @@ const steps = [
   ['test', ['pnpm', 'test']],
   ['build', ['pnpm', 'build']],
   ['shoot', ['pnpm', 'shoot', '--', '--no-build']],
+  ['play-check', ['pnpm', 'play-check', '--', '--no-build']],
 ];
 
 const results = [];

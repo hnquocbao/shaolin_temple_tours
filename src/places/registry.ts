@@ -1,8 +1,10 @@
 import type { CameraStop, PlaceDef } from './types';
 import { kitYard } from './kit-yard';
 import { shaolin } from './shaolin';
+import { yard } from './yard';
 
 export const places: readonly PlaceDef[] = [shaolin, kitYard];
+export const places: readonly PlaceDef[] = [shaolin, yard];
 
 export const defaultPlaceId = shaolin.id;
 

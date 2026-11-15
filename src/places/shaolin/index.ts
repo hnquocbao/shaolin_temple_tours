@@ -96,19 +96,58 @@ const goldenHour: Mood = {
 };
 
 /** A placed building with its world transform and a cheap bounding box for height queries. */
-interface Placed {
+export interface Placed {
   building: Building;
   base: number;
   x: number;
   z: number;
   yaw: number;
-  /** Local half extents to test: the platform plus its steps, which reach 3 m past the front and back. */
+  /** Local half extents to test: the platform plus its steps, measured from the building itself. */
   reachX: number;
   reachZ: number;
   /** World bounding radius squared check: centre and radius. */
   radius: number;
 }
 
+/**
+ * How far a building's walkable surface (platform and steps) reaches from its centre along one local axis,
+ * found by probing its own `heightAt`. Steps differ per building, so a fixed allowance cuts off the lowest treads.
+ */
+function walkReach(building: Building, axis: 'x' | 'z'): number {
+  const half = (axis === 'x' ? building.footprint.width : building.footprint.depth) / 2;
+  let reach = half;
+  for (let d = half; d <= half + 10; d += 0.1) {
+    const hit =
+      axis === 'x'
+        ? building.heightAt(d, 0) > 0 || building.heightAt(-d, 0) > 0
+        : building.heightAt(0, d) > 0 || building.heightAt(0, -d) > 0;
+    if (hit) reach = d;
+  }
+  return reach + 0.3;
+}
+
+/** Build every layout entry and place it on its terrace. Pure apart from creating three.js objects. */
+export function placeLayout(): { buildings: Building[]; placed: Placed[]; solids: Solid[] } {
+  const buildings: Building[] = [];
+  const placed: Placed[] = [];
+  const solids: Solid[] = [];
+  for (const entry of layout) {
+    const building = buildLayoutBuilding(entry);
+    const [x, y, z] = positionOf(entry);
+    const yaw = yawOf(entry);
+    building.object.position.set(x, y, z);
+    building.object.rotation.y = yaw;
+    buildings.push(building);
+    solids.push(...placeSolids(building.solids, [x, y, z], yaw));
+    const reachX = walkReach(building, 'x');
+    const reachZ = walkReach(building, 'z');
+    placed.push({ building, base: y, x, z, yaw, reachX, reachZ, radius: Math.hypot(reachX, reachZ) });
+  }
+  return { buildings, placed, solids };
+}
+
+/** The perimeter wall stands at x = ±56. */
+const WALL_X = 56;
 /** Half-width of the lane beside each hall that the walking routes use (x = 22). Trees stay out of it. */
 const LANE_X = 22;
 const LANE_HALF = 3.5;
@@ -122,6 +161,7 @@ export function courtyardTrees(placed: readonly Placed[]): Placement[] {
   const clear = (x: number, z: number, margin: number): boolean => {
     if (Math.abs(Math.abs(x) - LANE_X) < LANE_HALF) return false;
     if (Math.abs(x) < 4) return false; // the central axis stays open
+    if (Math.abs(x) + margin > WALL_X - 1.5) return false; // crowns stay clear of the perimeter wall
     for (const p of placed) {
       const [lx, lz] = toLocal(x, z, [p.x, p.base, p.z], p.yaw);
       if (Math.abs(lx) < p.reachX + margin && Math.abs(lz) < p.reachZ + margin) return false;
@@ -140,8 +180,8 @@ export function courtyardTrees(placed: readonly Placed[]): Placement[] {
         add({ species: 'cypress', x: side * 15.5, z: t.z + dz, scale: 1.1 }, 2.5);
         add({ species: 'pine', x: side * 30, z: t.z + dz + 2, scale: 1.3 }, 4);
       }
-      add({ species: 'broadleaf', x: side * 51, z: t.z - 14, scale: 1.2, color: side < 0 ? 0xd08a2a : 0xc8642a }, 4);
-      add({ species: 'broadleaf', x: side * 51, z: t.z + 14, scale: 1.1, color: 0xd9a531 }, 4);
+      add({ species: 'broadleaf', x: side * 49.5, z: t.z - 14, scale: 1.1, color: side < 0 ? 0xd08a2a : 0xc8642a }, 4);
+      add({ species: 'broadleaf', x: side * 49.5, z: t.z + 14, scale: 1.05, color: 0xd9a531 }, 4);
       add({ species: 'pine', x: side * 44, z: t.z + 15, scale: 1.2 }, 4);
     }
   }
@@ -170,23 +210,8 @@ export const shaolin: PlaceDef = {
     const land = buildShaolinTerrainMesh(terrain, terrain.seed);
     root.add(land.root);
 
-    const buildings: Building[] = [];
-    const placed: Placed[] = [];
-    const solids: Solid[] = [];
-
-    for (const entry of layout) {
-      const building = buildLayoutBuilding(entry);
-      const [x, y, z] = positionOf(entry);
-      const yaw = yawOf(entry);
-      building.object.position.set(x, y, z);
-      building.object.rotation.y = yaw;
-      root.add(building.object);
-      buildings.push(building);
-      solids.push(...placeSolids(building.solids, [x, y, z], yaw));
-      const reachX = building.footprint.width / 2 + 0.5;
-      const reachZ = building.footprint.depth / 2 + 3.2;
-      placed.push({ building, base: y, x, z, yaw, reachX, reachZ, radius: Math.hypot(reachX, reachZ) });
-    }
+    const { buildings, placed, solids } = placeLayout();
+    for (const b of buildings) root.add(b.object);
 
     const wallRng = createRng(seedFrom('shaolin-walls'));
     for (const run of wallRuns()) {
@@ -213,7 +238,17 @@ export const shaolin: PlaceDef = {
       minY: -30, // nothing under the cloud sea
     });
     const vegetation = buildVegetation(trees, {
-      lod: { focus: terraces.map((t): [number, number, number] => [t.centerX, t.top, t.centerZ]), near: 75 },
+      // Full-detail trees wherever the player or a camera stop comes close: the terraces, the stair, the arrival views.
+      lod: {
+        focus: [
+          ...terraces.map((t): [number, number, number] => [t.centerX, t.top, t.centerZ]),
+          ...[-260, -210, -160, -110, -60].map((z): [number, number, number] => [0, terrain.heightAt(0, z), z]),
+          ...shaolinStops()
+            .filter((stop) => stop.id.startsWith('arrival-'))
+            .map((stop): [number, number, number] => [...stop.position]),
+        ],
+        near: 75,
+      },
     });
     root.add(vegetation.root);
     solids.push(...trunkSolids(trees.filter((t) => t.explicit)));

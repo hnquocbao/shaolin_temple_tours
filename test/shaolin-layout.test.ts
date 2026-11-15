@@ -1,13 +1,13 @@
 import { Scene } from 'three';
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
 import { createRng, seedFrom } from '../src/engine/rng';
 import type { Building } from '../src/kit';
 import { FIXED_DT, HERO_HEIGHT, HERO_RADIUS, NO_INPUT, spawnState, stepHero, type HeroState, type World } from '../src/game/player/motion';
 import { worldFromPlace } from '../src/game/player/world';
-import { shaolin, buildLayoutBuilding } from '../src/places/shaolin';
+import { shaolin, buildLayoutBuilding, courtyardTrees, placeLayout } from '../src/places/shaolin';
 import { GATE_HALF, WALL_X, layout, positionOf, wallRuns, yawOf, type LayoutBuilding } from '../src/places/shaolin/layout';
 import { TERRACE_COUNT, createShaolinTerrain, terraces } from '../src/places/shaolin/terrain';
-import { placeSolids } from '../src/kit';
+import { placeSolids, toLocal } from '../src/kit';
 
 const built = new Map<string, Building>(layout.map((b) => [b.id, buildLayoutBuilding(b)]));
 const get = (b: LayoutBuilding): Building => {
@@ -229,4 +229,50 @@ describe('Shaolin on foot', () => {
       expect(end.y).toBeCloseTo(terraces[i]!.top, 1);
     });
   }
+});
+
+describe('walk reach and courtyard trees', () => {
+  const { placed, buildings } = placeLayout();
+  afterAll(() => {
+    for (const b of buildings) b.dispose();
+  });
+
+  it('covers every building\'s platform and steps: nothing walkable lies beyond the measured reach', () => {
+    for (const p of placed) {
+      for (let d = 0; d <= 12; d += 0.25) {
+        for (const lx of [-p.reachX - 0.05 - d, p.reachX + 0.05 + d]) {
+          for (let lz = -p.reachZ; lz <= p.reachZ; lz += 1) expect(p.building.heightAt(lx, lz)).toBe(0);
+        }
+        for (const lz of [-p.reachZ - 0.05 - d, p.reachZ + 0.05 + d]) {
+          for (let lx = -p.reachX; lx <= p.reachX; lx += 1) expect(p.building.heightAt(lx, lz)).toBe(0);
+        }
+      }
+    }
+  });
+
+  const trees = courtyardTrees(placed);
+
+  it('plants a good number of trees, including the great ginkgo', () => {
+    expect(trees.length).toBeGreaterThan(40);
+    expect(trees.some((t) => t.species === 'broadleaf' && (t.scale ?? 1) > 2)).toBe(true);
+    expect(new Set(trees.map((t) => t.species))).toEqual(new Set(['cypress', 'pine', 'broadleaf']));
+  });
+
+  it('keeps trees off the axis, out of the walking lanes and clear of the perimeter wall', () => {
+    for (const t of trees) {
+      expect(Math.abs(t.x)).toBeGreaterThanOrEqual(4);
+      expect(Math.abs(Math.abs(t.x) - 22)).toBeGreaterThanOrEqual(3.5);
+      expect(Math.abs(t.x)).toBeLessThan(52);
+    }
+  });
+
+  it('never plants a tree on a building, its platform or its steps', () => {
+    for (const t of trees) {
+      for (const p of placed) {
+        const [lx, lz] = toLocal(t.x, t.z, [p.x, p.base, p.z], p.yaw);
+        const inside = Math.abs(lx) < p.reachX + 2 && Math.abs(lz) < p.reachZ + 2;
+        expect(inside, `${t.species} at ${t.x},${t.z}`).toBe(false);
+      }
+    }
+  });
 });
